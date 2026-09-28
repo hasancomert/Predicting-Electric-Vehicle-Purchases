@@ -41,7 +41,9 @@ kaggle quota                    # haftalık GPU kotası (30 saat)
 ```
 xgb ve cat GPU'da eğitilir, etiketin sonuna `_gpu` eklenir (`xgb_base_0.1_gpu`); GPU sonuçları CPU'dakilerden
 biraz farklı olabilir. pip'in LightGBM'i CUDA'sız olduğundan lgbm orada da CPU'da koşar. Her push not defterinin
-yeni bir sürümünü başlatır.
+yeni bir sürümünü başlatır. XGBoost GPU'da CPU ile aynı skoru verir (base 0.1: 0.94193 / 0.94192, 17 / 85 sn).
+CatBoost GPU'da biraz zayıf (base 0.1, aynı katlarda CPU'dan ~0.00026 düşük; GPU varsayılanı `border_count=128`
+ile ~0.0008 düşük) ve 254 sınırla hızlı da değil (543 sn), bu yüzden CatBoost yerelde CPU'da eğitilir.
 
 ## Özellik grupları (`train.py`)
 - `base`: ham 13 sütun
@@ -50,6 +52,12 @@ yeni bir sürümünü başlatır.
 - `te1`: her sütunun hedef kodlaması (sklearn `TargetEncoder`, kat içinde, cross-fitting)
 - `te2` / `te2s`: bütün / düşük kardinaliteli sütun ikilileri; `ted`: hane izlerinin hedef kodlaması
 - `ncat`: küçük tam sayı sütunları kategori olarak; `orig`: orijinal veri ek eğitim satırı
+- `bins`: gelir `/100`, `/1000` ve mesafe tam km, kaba ölçekte hedef kodlama anahtarları;
+  `bins2`: ek ölçekler (gelir `/10`, `/500`, `/5000`, mesafe `/5`)
+- `te3`: hedef kodlama üç yumuşatmayla (`auto`, 10, 100); `dig2`: sayısal sütunların tek tek haneleri
+- `recipe`: orijinal verinin üretim formüllerinin gürültüsüz kısmı (alım ve menzil kaygısı skoru,
+  C. Deotte'nin EDA'sı); `omean`: orijinal veride değer başına alım oranı
+- `mb`: lgbm/xgb için `max_bin=1024` (özellik değil, model ayarı)
 
 Deneyler (LightGBM, öğrenme oranı 0.1, 5 kat CV AUC):
 
@@ -68,6 +76,24 @@ Deneyler (LightGBM, öğrenme oranı 0.1, 5 kat CV AUC):
 | base,freq,dig,te2s | 0.94535 |
 
 XGBoost aynı ayarla base,freq,dig,te1: 0.94554.
+
+Yeni gruplar (lr 0.1, 5 kat CV AUC; XGBoost Kaggle T4 GPU'sunda). Fikirler açık not defterlerinden
+(najiama "Pure LGBM", evgendvorkin "Single XGB") ve C. Deotte'nin EDA'sından:
+
+| Gruplar (taban: base,freq,dig,te1) | LightGBM | XGBoost |
+|---|---|---|
+| taban | 0.94543 | 0.94551 |
+| taban,recipe | 0.94544 | 0.94554 |
+| taban,omean | 0.94543 | 0.94555 |
+| taban,te3 | 0.94541 | 0.94555 |
+| taban,dig2 | 0.94548 | 0.94561 |
+| taban,mb | 0.94544 | 0.94553 |
+| **taban,bins** | **0.94570** | **0.94582** |
+| taban,bins,dig2 | 0.94574 | 0.94582 |
+| taban,bins,te3 | 0.94574 | 0.94588 |
+| taban,bins,bins2 | 0.94570 | 0.94586 |
+| taban,bins,mb | 0.94570 | 0.94583 |
+| **taban,bins,dig2,te3** | 0.94573 | **0.94591** |
 
 ## Gönderimler
 Dosya adı `pevpsubmissionN.csv`.
