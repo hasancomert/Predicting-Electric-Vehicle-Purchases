@@ -1,7 +1,7 @@
+*.csv
+*.npy
+*.zip
+catboost_info/
 __pycache__/
-*.pyc
 .ipynb_checkpoints/
 kaggle.json
-*.dcm
-data/
-outputs/
