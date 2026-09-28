@@ -67,13 +67,13 @@ def push(jobs):
 def fetch():
     last = None
     while True:
-        time.sleep(30)
         s = api.kernels_status(REF)
         if s.status.name != last:
             last = s.status.name
             print(time.strftime("%H:%M:%S"), last, flush=True)
         if last in ("COMPLETE", "ERROR", "CANCEL_ACKNOWLEDGED"):
             break
+        time.sleep(30)
     log = api.kernels_logs(REF)
     try:
         entries = json.loads(log)
@@ -84,7 +84,11 @@ def fetch():
     print(out)
     if last != "COMPLETE":
         sys.exit(f"{err[-3000:]}\n{last}: {s.failure_message}")
-    files, _ = api.kernels_output(REF, f"{BUILD}/out", file_pattern=r"\.npy$", force=True)
+    try:
+        files, _ = api.kernels_output(REF, f"{BUILD}/out", file_pattern=r"\.npy$", force=True)
+    except OSError as e:  # dosyalar www.kaggleusercontent.com'dan iner
+        sys.exit(f"çıktı indirilemedi ({type(e).__name__}); dosyalar Kaggle'da duruyor. "
+                 "www.kaggleusercontent.com erişimi açılınca: python kaggle_run.py --fetch")
     for f in files:
         shutil.move(f, os.path.basename(f))
         print("indirildi:", os.path.basename(f))
@@ -96,4 +100,5 @@ if __name__ == "__main__":
         sys.exit(__doc__)
     if args != ["--fetch"]:
         push(args)
+        time.sleep(30)  # yeni sürüm başlamadan öncekinin durumu okunmasın
     fetch()

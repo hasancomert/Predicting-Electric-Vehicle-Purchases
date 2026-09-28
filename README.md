@@ -10,7 +10,8 @@ Depo köküne (Git'e girmez):
 
 ## Kaggle bağlantısı (GPU)
 Ortamda `KAGGLE_USERNAME` + `KAGGLE_KEY` (ya da `KAGGLE_API_TOKEN`) ve ağ izni
-(`www.kaggle.com`, `api.kaggle.com`, `storage.googleapis.com`) varsa: veri `kaggle competitions download`
+(`www.kaggle.com`, `api.kaggle.com`, `storage.googleapis.com`; not defteri çıktısını indirmek için
+`www.kaggleusercontent.com`) varsa: veri `kaggle competitions download`
 ile iner, ağır eğitim `kaggle kernels push` ile Kaggle GPU'sunda çalışır. Gönderim yalnızca kullanıcı isteyince.
 ```
 python -m pip install kaggle
