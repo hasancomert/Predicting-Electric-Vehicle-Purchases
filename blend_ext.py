@@ -4,6 +4,8 @@ Kullanım: python blend_ext.py pevpsubmission6 [aday,aday,...]   (aday verilmezs
 ext/ için: kaggle datasets download -d najiama/s6e9-oof -p ext/s6e9-oof --unzip
            kaggle datasets download -d megayak/s6e9-six-feature-views-oof-library \\
                -p ext/s6e9-six-feature-views-oof-library --unzip"""
+import glob
+import os
 import sys
 
 import numpy as np
@@ -25,6 +27,12 @@ OWN = {"our_xgb3": f"{X}_gpu,{X}_s7_gpu,{X}_s11_gpu", "our_cat2": f"{C},{C}_s7",
        "our_pub_lgbm": "pub_lgbm", "our_pub_xgb": "pub_xgb",
        "our_lgbm_pubp": "lgbm_base+bins+dig+dig2+freq+te1+te3_0.02_pubp",
        "our_nn": "nn_base+bins+dig+dig2+freq+te1+te3_0.002_gpu"}
+RM = sorted(glob.glob("oof_pub_realmlp_s*.npy"))  # RealMLP tohumları (public/pub_realmlp.py)
+if RM:
+    OWN["our_realmlp"] = ",".join(f[4:-4] for f in RM)
+for k, t in {"our_cat_d8": f"{C}_d8_gpu", "our_cat_d5": f"{C}_d5"}.items():
+    if os.path.exists(f"oof_{t}.npy"):
+        OWN[k] = t
 for k, tags in OWN.items():
     load = lambda kind: np.mean([np.load(f"{kind}_{t}.npy") for t in tags.split(",")], axis=0)
     O[k], P[k] = rank(load("oof")), rank(load("pred"))
