@@ -99,6 +99,14 @@ Yeni gruplar (lr 0.1, 5 kat CV AUC; XGBoost Kaggle T4 GPU'sunda). Fikirler açı
 | taban,bins,mb | 0.94570 | 0.94583 |
 | **taban,bins,dig2,te3** | 0.94573 | **0.94591** |
 
+Ayar araması (`trials=50`, XGBoost, taban,bins,dig2,te3, lr 0.1, Kaggle T4, 35 dk): varsayılan ayarlar
+0.94591, en iyi 0.94606 (`max_depth=4,min_child_weight=1.616,subsample=0.914,colsample_bytree=0.5086,`
+`reg_lambda=0.6968,reg_alpha=0.009999,max_bin=512`). En iyi denemelerin çoğu derinlik 4, yüksek subsample,
+`max_bin` 512-1024; tepe düz (derinlik 4'lüler 0.94599-0.94606). Bu ayarlar lr 0.02'de `name=t1` ile
+kullanıldı: tohum 42/7/11 0.94612/0.94613/0.94611, ortalaması 0.94619 (ayarsız 0.94603).
+CatBoost (lr 0.05): taban,bins tohum 42/7 0.94603/0.94602 (ortalaması 0.94608); taban,bins,dig2,te3 0.94609
+(29 dk).
+
 ## Gönderimler
 Dosya adı `pevpsubmissionN.csv`.
 | No | İçerik | CV AUC | Public LB |
@@ -106,6 +114,7 @@ Dosya adı `pevpsubmissionN.csv`.
 | 1 | LightGBM 0.6 + CatBoost 0.4, ham özellikler | 0.94201 | 0.94176 |
 | 2 | XGBoost 0.5 + CatBoost 0.5, base,freq,dig,te1 | 0.94575 | 0.94587 |
 | 3 | XGBoost 0.5 (+bins,dig2,te3) + CatBoost 0.5 (+bins) | 0.94612 | 0.94625 |
+| 4 | XGBoost `t1` 3 tohum 0.75 + CatBoost (+bins,dig2,te3) 0.25 | 0.94621 | |
 
 1. gönderimin tek modelleri: LightGBM 0.94190 (~3 dk), CatBoost 0.94178 (~22 dk, 4 çekirdek CPU).
 2. gönderimin tek modelleri (base,freq,dig,te1): LightGBM lr 0.02 0.94562 (5.5 dk),
@@ -113,3 +122,5 @@ XGBoost lr 0.02 0.94566 (7 dk), CatBoost lr 0.05 0.94568 (24 dk). Hill climbing 
 3. gönderimin tek modelleri: XGBoost lr 0.02 base,freq,dig,dig2,te1,te3,bins 0.94603 (Kaggle T4, 3 dk),
 LightGBM aynı gruplarla lr 0.02 0.94593 (Kaggle CPU, 13 dk), CatBoost lr 0.05 base,freq,dig,te1,bins 0.94603
 (yerel CPU, 24 dk). Hill climbing yine LightGBM'i almadı (XGBoost + LightGBM harmanı 0.94605).
+4. gönderim: ayarlanmış XGBoost (`t1`, lr 0.02, taban,bins,dig2,te3) tohum 42/7/11 her biri 0.25 ve CatBoost
+lr 0.05 taban,bins,dig2,te3 0.25. Aday olan LightGBM, ayarsız XGBoost ve iki eski CatBoost ağırlık almadı.
