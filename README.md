@@ -27,6 +27,7 @@ python train.py lgbm base,freq,dig,te1 0.02     # oof_/pred_<etiket>.npy
 python train.py xgb  base,freq,dig,te1 0.02
 python train.py cat  base,freq,dig,te1 0.05
 python blend.py pevpsubmission3 <etiket> <etiket> ...   # hill climbing, pevpsubmission3.csv
+python blend.py pevpsubmission5 <etiket>,<etiket> ...    # virgülle verilenler (tohumlar) önce ortalanır
 python train.py xgb base,freq,dig,te1 0.02 max_depth=7,subsample=0.9   # model ayarları (etikete eklenir)
 python train.py xgb base,freq,dig,te1 0.02 seed=7   # başka model/hedef kodlama tohumu, katlar aynı
 python train.py xgb base,freq,dig,te1 0.1 trials=40  # Optuna araması, en iyi ayarları basar
@@ -122,7 +123,7 @@ katkısı yok.
 En iyi açık not defterlerinin uyarlamaları; kendi Kaggle not defterlerinde koşar, `oof_/pred_pub_*.npy`
 yazar ve `blend.py` ile harmanlanır (yazarlar dosya başında):
 - `pub_lgbm.py` (najiama, LightGBM, 5 kat, katlar `train.py` ile aynı): CV 0.94609 (Kaggle CPU, ~20 dk)
-- `pub_xgb.py` (evgendvorkin, XGBoost, 10 kat, GPU)
+- `pub_xgb.py` (evgendvorkin, XGBoost, 10 kat): CV 0.94607 (Kaggle T4, ~15 dk)
 Kaggle'da çalıştırmak için dosyayı `kernel-metadata.json` (`enable_gpu`, yarışma ve orijinal veri kaynakları)
 ile bir klasöre koyup `kaggle kernels push -p <klasör>`, bitince
 `kaggle kernels output <kullanıcı>/<slug> -p <klasör>`.
@@ -135,6 +136,7 @@ Dosya adı `pevpsubmissionN.csv`.
 | 2 | XGBoost 0.5 + CatBoost 0.5, base,freq,dig,te1 | 0.94575 | 0.94587 |
 | 3 | XGBoost 0.5 (+bins,dig2,te3) + CatBoost 0.5 (+bins) | 0.94612 | 0.94625 |
 | 4 | XGBoost `t1` 3 tohum 0.75 + CatBoost (+bins,dig2,te3) 0.25 | 0.94621 | 0.94637 |
+| 5 | XGBoost `t1` 3 tohum, CatBoost 2 tohum, `pub_lgbm`, `pub_xgb` (her biri 0.25) | 0.94626 | |
 
 1. gönderimin tek modelleri: LightGBM 0.94190 (~3 dk), CatBoost 0.94178 (~22 dk, 4 çekirdek CPU).
 2. gönderimin tek modelleri (base,freq,dig,te1): LightGBM lr 0.02 0.94562 (5.5 dk),
@@ -144,3 +146,6 @@ LightGBM aynı gruplarla lr 0.02 0.94593 (Kaggle CPU, 13 dk), CatBoost lr 0.05 b
 (yerel CPU, 24 dk). Hill climbing yine LightGBM'i almadı (XGBoost + LightGBM harmanı 0.94605).
 4. gönderim: ayarlanmış XGBoost (`t1`, lr 0.02, taban,bins,dig2,te3) tohum 42/7/11 her biri 0.25 ve CatBoost
 lr 0.05 taban,bins,dig2,te3 0.25. Aday olan LightGBM, ayarsız XGBoost ve iki eski CatBoost ağırlık almadı.
+5. gönderim: tohumlar önce ortalanıp (blend.py'de virgülle) dört bileşen eşit ağırlıkla: XGBoost `t1` 0.94619,
+CatBoost taban,bins,dig2,te3 2 tohum 0.94614, `pub_lgbm` 0.94609, `pub_xgb` 0.94607. Sinir ağı ve LightGBM
+`pubp` ağırlık almadı.

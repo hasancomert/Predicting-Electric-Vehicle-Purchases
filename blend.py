@@ -1,5 +1,6 @@
 """OOF tahminleri üzerinde hill climbing ile harman ağırlıklarını bulur.
-Kullanım: python blend.py pevpsubmission3 lgbm_... xgb_... cat_...  ->  pevpsubmission3.csv"""
+Kullanım: python blend.py pevpsubmission3 lgbm_... xgb_... cat_...  ->  pevpsubmission3.csv
+Virgülle ayrılmış etiketler (ör. tohumlar) önce ortalanır ve tek model sayılır."""
 import sys
 
 import numpy as np
@@ -8,8 +9,9 @@ from sklearn.metrics import roc_auc_score
 
 out, tags = sys.argv[1], sys.argv[2:]
 y = (pd.read_csv("train.csv", usecols=["Will_Buy_EV"]).Will_Buy_EV == "Yes").to_numpy()
-oof = np.column_stack([np.load(f"oof_{t}.npy") for t in tags])
-pred = np.column_stack([np.load(f"pred_{t}.npy") for t in tags])
+load = lambda kind, tag: np.mean([np.load(f"{kind}_{t}.npy") for t in tag.split(",")], axis=0)
+oof = np.column_stack([load("oof", t) for t in tags])
+pred = np.column_stack([load("pred", t) for t in tags])
 single = [roc_auc_score(y, o) for o in oof.T]
 for t, s in zip(tags, single):
     print(f"{s:.5f}  {t}")
