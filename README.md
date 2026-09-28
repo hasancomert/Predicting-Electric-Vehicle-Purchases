@@ -27,7 +27,11 @@ python train.py lgbm base,freq,dig,te1 0.02     # oof_/pred_<etiket>.npy
 python train.py xgb  base,freq,dig,te1 0.02
 python train.py cat  base,freq,dig,te1 0.05
 python blend.py pevpsubmission3 <etiket> <etiket> ...   # hill climbing, pevpsubmission3.csv
+python train.py xgb base,freq,dig,te1 0.02 max_depth=7,subsample=0.9   # model ayarları (etikete eklenir)
+python train.py xgb base,freq,dig,te1 0.02 seed=7   # başka model/hedef kodlama tohumu, katlar aynı
+python train.py xgb base,freq,dig,te1 0.1 trials=40  # Optuna araması, en iyi ayarları basar
 ```
+Uzun ayar listesi yerine `name=ad` etikete kısa bir ad koyar.
 
 ### Kaggle GPU'sunda eğitim
 `kaggle_run.py`, `train.py`'yi özel bir Kaggle not defterinde çalıştırır (`<kullanıcı>/pvep-train`, T4 GPU,

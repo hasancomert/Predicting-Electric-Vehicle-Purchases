@@ -1,5 +1,8 @@
 """Özellik grupları + model, 5 katlı CV; oof_<etiket>.npy ve pred_<etiket>.npy yazar.
-Kullanım: python train.py <lgbm|xgb|cat> <gruplar> [öğrenme oranı, varsayılan 0.1]
+Kullanım: python train.py <lgbm|xgb|cat> <gruplar> [öğrenme oranı, varsayılan 0.1] [ayarlar]
+Ayarlar (virgülle, ör. max_depth=7,subsample=0.9) modelin varsayılanlarını ezer ve etikete eklenir;
+seed=N model ve hedef kodlama tohumu (katlar sabit), name=ad etikette ayarların yerine geçer,
+trials=N Optuna ile N deneme arar (dosya yazmaz, en iyi ayarları basar; şimdilik xgb).
 Gruplar (virgülle): base, freq, dig, dig2, recipe, omean, te1, te3, bins, bins2, te2, te2s, ted, ncat,
 orig, mb (lgbm/xgb max_bin=1024) (README'de sonuçlar)
 PVEP_GPU=1 ile xgb ve cat GPU'da eğitilir, etikete _gpu eklenir (kaggle_run.py bunu ayarlar)."""
@@ -27,6 +30,20 @@ COLS = NUMS + CATS
 
 model_name, groups = sys.argv[1], set(sys.argv[2].split(","))
 LR = float(sys.argv[3]) if len(sys.argv) > 3 else 0.1
+
+
+def num(v):  # "7" -> 7, "0.9" -> 0.9, diğerleri metin
+    for t in (int, float):
+        try:
+            return t(v)
+        except ValueError:
+            pass
+    return v
+
+
+OVR = dict(kv.split("=") for kv in sys.argv[4].split(",")) if len(sys.argv) > 4 else {}
+OVR = {k: num(v) for k, v in OVR.items()}
+TRIALS, NAME, MSEED = OVR.pop("trials", 0), OVR.pop("name", None), OVR.pop("seed", SEED)
 GPU = os.environ.get("PVEP_GPU") == "1" and model_name != "lgbm"  # pip LightGBM'i CUDA'sız
 
 train, test, orig = (pd.read_csv(f) for f in ("train.csv", "test.csv", "original.csv"))
@@ -109,7 +126,7 @@ def fold_data(tr, va):
                                          pd.DataFrame(e, columns=names)], axis=1)
     for sm in (SMOOTH if K is not None else []):
         enc = TargetEncoder(target_type="binary", smooth=sm, cv=5, shuffle=True,
-                            random_state=SEED)
+                            random_state=MSEED)
         names = [f"te{'' if sm == 'auto' else int(sm)}_{k}" for k in keys]
         Xtr = add(Xtr, enc.fit_transform(K[idx_tr], ytr), names)
         Xva = add(Xva, enc.transform(K[va]), names)
@@ -117,45 +134,83 @@ def fold_data(tr, va):
     return Xtr, ytr, Xva, Xte
 
 
-def lgbm(Xtr, ytr, Xva, yva, Xte):
-    mdl = lgb.LGBMClassifier(n_estimators=20000, learning_rate=LR, num_leaves=63,
-                             min_child_samples=100, subsample=0.8, subsample_freq=1,
-                             colsample_bytree=0.5, reg_lambda=1.0, random_state=SEED,
-                             verbose=-1, **MB)
+def lgbm(Xtr, ytr, Xva, yva, Xte, **p):
+    mdl = lgb.LGBMClassifier(**dict(n_estimators=20000, learning_rate=LR, num_leaves=63,
+                                    min_child_samples=100, subsample=0.8, subsample_freq=1,
+                                    colsample_bytree=0.5, reg_lambda=1.0, random_state=MSEED,
+                                    verbose=-1, **MB) | p)
     mdl.fit(Xtr, ytr, eval_set=[(Xva, yva)], eval_metric="auc",
             callbacks=[lgb.early_stopping(int(20 / LR), verbose=False)])
     return mdl.predict_proba(Xva)[:, 1], mdl.predict_proba(Xte)[:, 1], mdl.best_iteration_
 
 
-def xgbm(Xtr, ytr, Xva, yva, Xte):
-    mdl = xgb.XGBClassifier(n_estimators=20000, learning_rate=LR, max_depth=6,
-                            min_child_weight=5, subsample=0.8, colsample_bytree=0.5,
-                            reg_lambda=1.0, tree_method="hist", device="cuda" if GPU else "cpu",
-                            enable_categorical=True, max_cat_to_onehot=4, eval_metric="auc",
-                            early_stopping_rounds=int(20 / LR), random_state=SEED, n_jobs=4, **MB)
+def xgbm(Xtr, ytr, Xva, yva, Xte, **p):
+    mdl = xgb.XGBClassifier(**dict(n_estimators=20000, learning_rate=LR, max_depth=6,
+                                   min_child_weight=5, subsample=0.8, colsample_bytree=0.5,
+                                   reg_lambda=1.0, tree_method="hist",
+                                   device="cuda" if GPU else "cpu", enable_categorical=True,
+                                   max_cat_to_onehot=4, eval_metric="auc",
+                                   early_stopping_rounds=int(20 / LR), random_state=MSEED,
+                                   n_jobs=4, **MB) | p)
     mdl.fit(Xtr, ytr, eval_set=[(Xva, yva)], verbose=False)
     return mdl.predict_proba(Xva)[:, 1], mdl.predict_proba(Xte)[:, 1], mdl.best_iteration
 
 
-def cat(Xtr, ytr, Xva, yva, Xte):
+def cat(Xtr, ytr, Xva, yva, Xte, **p):
     s = lambda d: d.astype({c: str for c in CATS})
-    mdl = CatBoostClassifier(iterations=20000, learning_rate=LR, depth=6, eval_metric="AUC",
-                             od_type="Iter", od_wait=int(20 / LR), cat_features=CATS,
-                             task_type="GPU" if GPU else "CPU", border_count=254,  # GPU varsayılanı 128
-                             random_seed=SEED, verbose=0, allow_writing_files=False)
+    mdl = CatBoostClassifier(**dict(iterations=20000, learning_rate=LR, depth=6, eval_metric="AUC",
+                                    od_type="Iter", od_wait=int(20 / LR), cat_features=CATS,
+                                    task_type="GPU" if GPU else "CPU",
+                                    border_count=254,  # GPU varsayılanı 128
+                                    random_seed=MSEED, verbose=0, allow_writing_files=False) | p)
     mdl.fit(s(Xtr), ytr, eval_set=(s(Xva), yva))
     return (mdl.predict_proba(s(Xva))[:, 1], mdl.predict_proba(s(Xte))[:, 1],
             mdl.get_best_iteration())
 
 
+MODELS = {"lgbm": lgbm, "xgb": xgbm, "cat": cat}
+SPACE = {  # Optuna arama uzayları (öğrenme oranı komut satırındaki)
+    "xgb": lambda t: dict(
+        max_depth=t.suggest_int("max_depth", 4, 10),
+        min_child_weight=t.suggest_float("min_child_weight", 1, 100, log=True),
+        subsample=t.suggest_float("subsample", 0.5, 1.0),
+        colsample_bytree=t.suggest_float("colsample_bytree", 0.2, 1.0),
+        reg_lambda=t.suggest_float("reg_lambda", 0.01, 30, log=True),
+        reg_alpha=t.suggest_float("reg_alpha", 0.001, 10, log=True),
+        max_bin=t.suggest_categorical("max_bin", [256, 512, 1024])),
+}
 t0 = time.time()
+if TRIALS:  # kat verisi bir kez hazırlanır; her deneme 5 katlı CV AUC döndürür
+    import optuna
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    data = [fold_data(tr, va) for tr, va in folds]
+
+    def objective(trial):
+        prm = SPACE[model_name](trial) | OVR
+        oof = np.zeros(n)
+        for (tr, va), (Xtr, ytr, Xva, _) in zip(folds, data):
+            oof[va] = MODELS[model_name](Xtr, ytr, Xva, y[va], Xva, **prm)[0]
+        auc = roc_auc_score(y, oof)
+        print(f"deneme {trial.number}: {auc:.5f}  {prm}  [{time.time() - t0:.0f} sn]", flush=True)
+        return auc
+
+    study = optuna.create_study(direction="maximize",
+                                sampler=optuna.samplers.TPESampler(seed=SEED))
+    study.optimize(objective, n_trials=TRIALS)
+    print(f"en iyi {study.best_value:.5f}: " + ",".join(
+        f"{k}={v:.4g}" if isinstance(v, float) else f"{k}={v}"
+        for k, v in study.best_params.items()), flush=True)
+    sys.exit()
+
 oof, pred = np.zeros(n), np.zeros(m)
 for i, (tr, va) in enumerate(folds):
     Xtr, ytr, Xva, Xte = fold_data(tr, va)
-    oof[va], p, it = {"lgbm": lgbm, "xgb": xgbm, "cat": cat}[model_name](Xtr, ytr, Xva, y[va], Xte)
+    oof[va], p, it = MODELS[model_name](Xtr, ytr, Xva, y[va], Xte, **OVR)
     pred += p / FOLDS
     print(f"  fold {i}: {roc_auc_score(y[va], oof[va]):.5f} ({it} it)", flush=True)
-tag = f"{model_name}_{'+'.join(sorted(groups))}_{LR}" + ("_gpu" if GPU else "")
+tag = (f"{model_name}_{'+'.join(sorted(groups))}_{LR}"
+       + (f"_{NAME}" if NAME else "".join(f"_{k}={v}" for k, v in sorted(OVR.items())))
+       + (f"_s{MSEED}" if MSEED != SEED else "") + ("_gpu" if GPU else ""))
 print(f"{tag} CV AUC: {roc_auc_score(y, oof):.5f}  "
       f"[{time.time() - t0:.0f} sn, {Xtr.shape[1]} özellik]", flush=True)
 np.save(f"oof_{tag}.npy", oof)

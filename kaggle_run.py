@@ -1,6 +1,7 @@
 """train.py'yi Kaggle'da özel bir GPU not defterinde (T4) çalıştırır, bitince oof_/pred_*.npy
 dosyalarını buraya indirir. xgb ve cat GPU'da, lgbm CPU'da eğitilir (GPU etiketine _gpu eklenir).
 Kullanım: python kaggle_run.py "xgb base,freq,dig,te1 0.02" "cat base,freq,dig,te1 0.05"
+          python kaggle_run.py "xgb base,freq,dig,te1 0.1 trials=40"   # Optuna araması
           python kaggle_run.py --fetch   # son sürümü bekle, günlüğü göster, çıktıyı indir"""
 import json
 import os
@@ -42,9 +43,9 @@ for job in JOBS:
 
 def push(jobs):
     for job in jobs:
-        model, groups, *lr = job.split()
+        model, groups, *rest = job.split()  # rest: [öğrenme oranı [ayarlar]]
         if model not in ("lgbm", "xgb", "cat") or not set(groups.split(",")) <= GROUPS \
-                or len(lr) > 1 or lr and float(lr[0]) <= 0:
+                or len(rest) > 2 or rest and float(rest[0]) <= 0:
             sys.exit(f"hatalı iş: {job!r}")
     shutil.rmtree(BUILD, ignore_errors=True)
     os.makedirs(BUILD)
