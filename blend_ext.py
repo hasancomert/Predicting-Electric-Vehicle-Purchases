@@ -1,0 +1,89 @@
+"""Kendi modellerimiz + açık OOF kütüphaneleri (ext/) üzerinde sıra uzayında hill climbing.
+Ağırlıklar iç içe CV ile de ölçülür (4 katta seçilir, 5.'de değerlendirilir), aşırı öğrenme görünsün.
+Kullanım: python blend_ext.py pevpsubmission6 [aday,aday,...]   (aday verilmezse hepsi, sinir ağımız hariç)
+ext/ için: kaggle datasets download -d najiama/s6e9-oof -p ext/s6e9-oof --unzip
+           kaggle datasets download -d megayak/s6e9-six-feature-views-oof-library \\
+               -p ext/s6e9-six-feature-views-oof-library --unzip"""
+import sys
+
+import numpy as np
+import pandas as pd
+from scipy.stats import rankdata
+from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import StratifiedKFold
+
+tr = pd.read_csv("train.csv", usecols=["id", "Will_Buy_EV"])
+te = pd.read_csv("sample_submission.csv")
+y = (tr.Will_Buy_EV == "Yes").to_numpy().astype(int)
+rank = lambda v: rankdata(v) / len(v)
+O, P = {}, {}  # aday -> OOF / test sıraları
+
+# kendi modellerimiz (virgülle verilen tohumlar ortalanır)
+X = "xgb_base+bins+dig+dig2+freq+te1+te3_0.02_t1"
+C = "cat_base+bins+dig+dig2+freq+te1+te3_0.05"
+OWN = {"our_xgb3": f"{X}_gpu,{X}_s7_gpu,{X}_s11_gpu", "our_cat2": f"{C},{C}_s7",
+       "our_pub_lgbm": "pub_lgbm", "our_pub_xgb": "pub_xgb",
+       "our_lgbm_pubp": "lgbm_base+bins+dig+dig2+freq+te1+te3_0.02_pubp",
+       "our_nn": "nn_base+bins+dig+dig2+freq+te1+te3_0.002_gpu"}
+for k, tags in OWN.items():
+    load = lambda kind: np.mean([np.load(f"{kind}_{t}.npy") for t in tags.split(",")], axis=0)
+    O[k], P[k] = rank(load("oof")), rank(load("pred"))
+
+
+def aligned(frame, ids, col):
+    return pd.DataFrame({"id": ids}).merge(frame[["id", col]], on="id", how="left",
+                                           validate="one_to_one")[col].to_numpy(float)
+
+
+# najiama/s6e9-oof: ayrı OOF/test dosyaları
+N = "ext/s6e9-oof/"
+for k, f in {"naji_lgbm_v1": "Pure LGBM_V1", "naji_lgbm_v3": "Pure LGBM_V3", "naji_lgbm_v5": "Pure LGBM_V5",
+             "naji_lgbm_v6": "Pure LGBM_V6", "naji_xgb_te_5f": "XGBoost_Triple_TE_5folds",
+             "naji_xgb_te_10f": "XGBoost_Triple_TE_10folds"}.items():
+    fo, ft = pd.read_csv(f"{N}{f}_oof.csv"), pd.read_csv(f"{N}{f}_test.csv")
+    O[k] = rank(aligned(fo, tr.id, [c for c in fo if c != "id"][-1]))
+    P[k] = rank(aligned(ft, te.id, [c for c in ft if c != "id"][-1]))
+fo, ft = pd.read_csv(f"{N}Sergey_LGBM_oof.csv"), pd.read_csv(f"{N}Sergey_LGBM_submission.csv")
+O["naji_sergey"] = rank(aligned(fo, tr.id, [c for c in fo if c != "id"][-1]))
+P["naji_sergey"] = rank(aligned(ft, te.id, [c for c in ft if c != "id"][-1]))
+
+# megayak: altı özellik görünümü (A-F) ve RealMLP (G), 10 katlı sabit bölme, hedefler dosyada
+M = "ext/s6e9-six-feature-views-oof-library/"
+for fo, ft in [("oof_six_views.csv", "test_six_views.csv"), ("oof_realmlp_g.csv", "test_realmlp_g.csv")]:
+    fo, ft = pd.read_csv(M + fo), pd.read_csv(M + ft)
+    assert np.array_equal(aligned(fo, tr.id, "Will_Buy_EV").astype(int), y)
+    for c in [c for c in ft if c not in ("id", "ensemble")]:
+        k = "mv_" + (c if c.startswith("G_") else c[0])  # mv_A..mv_F, mv_G_realmlp_...
+        O[k], P[k] = rank(aligned(fo, tr.id, c)), rank(aligned(ft, te.id, c))
+assert all(np.isfinite(v).all() for v in [*O.values(), *P.values()])
+
+
+def hill(names, idx, max_steps=100):
+    """Tekrar seçilebilir açgözlü ağırlıklandırma; en iyi tekten başlar."""
+    A = np.column_stack([O[k][idx] for k in names])
+    single = [roc_auc_score(y[idx], a) for a in A.T]
+    cnt = np.zeros(len(names))
+    cnt[int(np.argmax(single))] = 1
+    best, s = max(single), A @ cnt
+    for _ in range(max_steps):
+        v, j = max((roc_auc_score(y[idx], s + A[:, j]), j) for j in range(len(names)))
+        if v <= best + 1e-7:
+            break
+        best, cnt[j], s = v, cnt[j] + 1, s + A[:, j]
+    return cnt / cnt.sum()
+
+
+out = sys.argv[1]
+names = sys.argv[2].split(",") if len(sys.argv) > 2 else [k for k in O if k != "our_nn"]
+for k in names:
+    print(f"{roc_auc_score(y, O[k]):.5f}  {k}")
+blind = np.zeros(len(y))
+for tr_i, va_i in StratifiedKFold(5, shuffle=True, random_state=42).split(y, y):
+    blind[va_i] = np.column_stack([O[k][va_i] for k in names]) @ hill(names, tr_i)
+w = hill(names, np.arange(len(y)))
+print("ağırlıklar:", {k: round(float(x), 3) for k, x in zip(names, w) if x})
+print(f"harman CV AUC: {roc_auc_score(y, np.column_stack([O[k] for k in names]) @ w):.5f}  "
+      f"(iç içe CV: {roc_auc_score(y, blind):.5f})")
+te["Will_Buy_EV"] = rank(np.column_stack([P[k] for k in names]) @ w)
+te.to_csv(f"{out}.csv", index=False)
+print(f"{out}.csv yazıldı, {len(te)} satır")

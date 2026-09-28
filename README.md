@@ -119,6 +119,24 @@ Sinir ağı (`nn`, Kaggle T4, lr 0.002, aynı set): 12 epoch 0.94525, 30 epoch 0
 aşırı öğreniyor (0.94228, geniş 0.94205). XGBoost ile sıra korelasyonu 0.993 (CatBoost 0.997) ama harmana
 katkısı yok.
 
+### Açık OOF kütüphaneleri (`ext/`, `blend_ext.py`)
+Başkalarının modellerinin OOF ve test tahminleri; indirme komutları `blend_ext.py`'nin başında. `blend_ext.py`
+kendi modellerimizle birlikte hepsini sıra uzayında hill climbing ile harmanlar ve ağırlıkları iç içe CV ile
+ölçer (4 katta seçilir, görmediği 5. katta değerlendirilir).
+- `megayak/s6e9-six-feature-views-oof-library`: altı ayrı özellik hattı (A-F, 0.94608-0.94628) ve RealMLP (G,
+  3 tohum 0.94618); 10 katlı sabit bölme, kat numaraları ve hedef dosyada, hedef istatistikleri kat içinde.
+- `najiama/s6e9-oof`: Pure LGBM V1/V3/V5/V6, Sergey LGBM, üçlü TE XGBoost 5/10 kat (0.94533-0.94624). Bizim
+  yeniden çalıştırdığımız V3 ile korelasyonu 0.9984 (0.94609 / 0.94606).
+
+| Harman | İç içe CV | Tüm veride |
+|---|---|---|
+| 5. gönderim (bizim dört bileşen) | 0.94626 | 0.94626 |
+| yalnızca megayak A-G | 0.94638 | 0.94640 |
+| hepsi (sinir ağımız hariç) | **0.94640** | **0.94641** |
+
+"Hepsi" seçimi: bizim CatBoost 2 tohum, naji üçlü TE XGBoost 10 kat, megayak A, B, D (her biri 0.143) ve
+RealMLP 3 tohum (0.286). Test tahminlerinde bileşenler arası korelasyon OOF'takiyle en çok 0.0012 farklı.
+
 ### Açık not defterleri (`public/`)
 En iyi açık not defterlerinin uyarlamaları; kendi Kaggle not defterlerinde koşar, `oof_/pred_pub_*.npy`
 yazar ve `blend.py` ile harmanlanır (yazarlar dosya başında):
@@ -137,6 +155,7 @@ Dosya adı `pevpsubmissionN.csv`.
 | 3 | XGBoost 0.5 (+bins,dig2,te3) + CatBoost 0.5 (+bins) | 0.94612 | 0.94625 |
 | 4 | XGBoost `t1` 3 tohum 0.75 + CatBoost (+bins,dig2,te3) 0.25 | 0.94621 | 0.94637 |
 | 5 | XGBoost `t1` 3 tohum, CatBoost 2 tohum, `pub_lgbm`, `pub_xgb` (her biri 0.25) | 0.94626 | 0.94637 |
+| 6 | sıra uzayında, açık OOF kütüphaneleriyle (`blend_ext.py`, aşağıda) | 0.94641 (iç içe 0.94640) | |
 
 1. gönderimin tek modelleri: LightGBM 0.94190 (~3 dk), CatBoost 0.94178 (~22 dk, 4 çekirdek CPU).
 2. gönderimin tek modelleri (base,freq,dig,te1): LightGBM lr 0.02 0.94562 (5.5 dk),
