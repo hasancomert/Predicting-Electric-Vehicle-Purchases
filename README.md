@@ -136,12 +136,19 @@ kendi modellerimizle birlikte hepsini sıra uzayında hill climbing ile harmanla
 
 "Hepsi" seçimi: bizim CatBoost 2 tohum, naji üçlü TE XGBoost 10 kat, megayak A, B, D (her biri 0.143) ve
 RealMLP 3 tohum (0.286). Test tahminlerinde bileşenler arası korelasyon OOF'takiyle en çok 0.0012 farklı.
+Lojistik regresyonla istifleme de aynı (iç içe 0.94639-0.94640); harmanlama yöntemi tavanda.
+
+Sonra eklenenler: RealMLP (`public/pub_realmlp.py`) kendi hesabımızda 6 tohumla (7/11/23/37/42/51, 5 kat, Kaggle
+T4, tohum başına ~5 dk): 0.94594-0.94604, ortalaması 0.94619. CatBoost derinlik 5 (yerel CPU, 28 dk) 0.94611,
+derinlik 8 (GPU) 0.94592. Son seçim (6. gönderim): RealMLP 6 tohum 0.286, CatBoost derinlik 5, naji üçlü TE
+XGBoost 10 kat, megayak A, B, D (her biri 0.143); CV 0.94642, iç içe 0.94641.
 
 ### Açık not defterleri (`public/`)
 En iyi açık not defterlerinin uyarlamaları; kendi Kaggle not defterlerinde koşar, `oof_/pred_pub_*.npy`
 yazar ve `blend.py` ile harmanlanır (yazarlar dosya başında):
 - `pub_lgbm.py` (najiama, LightGBM, 5 kat, katlar `train.py` ile aynı): CV 0.94609 (Kaggle CPU, ~20 dk)
 - `pub_xgb.py` (evgendvorkin, XGBoost, 10 kat): CV 0.94607 (Kaggle T4, ~15 dk)
+- `pub_realmlp.py` (yekenot, RealMLP, PyTorch, 5 kat, `PVEP_SEED` tohumu): tohum başına ~0.9460 (Kaggle T4, ~5 dk)
 Kaggle'da çalıştırmak için dosyayı `kernel-metadata.json` (`enable_gpu`, yarışma ve orijinal veri kaynakları)
 ile bir klasöre koyup `kaggle kernels push -p <klasör>`, bitince
 `kaggle kernels output <kullanıcı>/<slug> -p <klasör>`.
@@ -155,7 +162,7 @@ Dosya adı `pevpsubmissionN.csv`.
 | 3 | XGBoost 0.5 (+bins,dig2,te3) + CatBoost 0.5 (+bins) | 0.94612 | 0.94625 |
 | 4 | XGBoost `t1` 3 tohum 0.75 + CatBoost (+bins,dig2,te3) 0.25 | 0.94621 | 0.94637 |
 | 5 | XGBoost `t1` 3 tohum, CatBoost 2 tohum, `pub_lgbm`, `pub_xgb` (her biri 0.25) | 0.94626 | 0.94637 |
-| 6 | sıra uzayında, açık OOF kütüphaneleriyle (`blend_ext.py`, aşağıda) | 0.94641 (iç içe 0.94640) | |
+| 6 | sıra uzayında, açık OOF kütüphaneleri + RealMLP 6 tohum (`blend_ext.py`, aşağıda) | 0.94642 (iç içe 0.94641) | |
 
 1. gönderimin tek modelleri: LightGBM 0.94190 (~3 dk), CatBoost 0.94178 (~22 dk, 4 çekirdek CPU).
 2. gönderimin tek modelleri (base,freq,dig,te1): LightGBM lr 0.02 0.94562 (5.5 dk),
