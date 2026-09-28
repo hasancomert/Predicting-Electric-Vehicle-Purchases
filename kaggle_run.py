@@ -90,8 +90,9 @@ def fetch():
         sys.exit(f"çıktı indirilemedi ({type(e).__name__}); dosyalar Kaggle'da duruyor. "
                  "www.kaggleusercontent.com erişimi açılınca: python kaggle_run.py --fetch")
     for f in files:
-        shutil.move(f, os.path.basename(f))
-        print("indirildi:", os.path.basename(f))
+        if f.endswith(".npy"):  # günlük (pvep-train.log) kernel_build/out'ta kalır
+            shutil.move(f, os.path.basename(f))
+            print("indirildi:", os.path.basename(f))
 
 
 if __name__ == "__main__":

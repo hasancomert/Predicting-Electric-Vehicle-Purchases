@@ -113,7 +113,7 @@ def cat(Xtr, ytr, Xva, yva, Xte):
     s = lambda d: d.astype({c: str for c in CATS})
     mdl = CatBoostClassifier(iterations=20000, learning_rate=LR, depth=6, eval_metric="AUC",
                              od_type="Iter", od_wait=int(20 / LR), cat_features=CATS,
-                             task_type="GPU" if GPU else "CPU",
+                             task_type="GPU" if GPU else "CPU", border_count=254,  # GPU varsayılanı 128
                              random_seed=SEED, verbose=0, allow_writing_files=False)
     mdl.fit(s(Xtr), ytr, eval_set=(s(Xva), yva))
     return (mdl.predict_proba(s(Xva))[:, 1], mdl.predict_proba(s(Xte))[:, 1],
