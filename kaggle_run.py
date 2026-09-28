@@ -13,8 +13,8 @@ from kaggle import api
 
 SLUG, BUILD = "pvep-train", "kernel_build"
 REF = f"{api.get_config_value('username')}/{SLUG}"
-GROUPS = {"base", "freq", "dig", "dig2", "recipe", "omean", "te1", "te3", "bins", "bins2", "te2",
-          "te2s", "ted", "ncat", "orig", "mb"}
+GROUPS = {"base", "freq", "freq2", "dig", "dig2", "recipe", "omean", "flag", "te1", "te3", "bins",
+          "bins2", "tedig", "te2", "te2s", "ted", "ncat", "orig", "mb"}
 
 # Not defterinde çalışan kod; başına JOBS ve TRAIN (train.py'nin metni) eklenir.
 BODY = """import glob, os, shutil, subprocess, sys

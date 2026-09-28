@@ -62,6 +62,8 @@ ile ~0.0008 düşük) ve 254 sınırla hızlı da değil (543 sn), bu yüzden Ca
 - `recipe`: orijinal verinin üretim formüllerinin gürültüsüz kısmı (alım ve menzil kaygısı skoru,
   C. Deotte'nin EDA'sı); `omean`: orijinal veride değer başına alım oranı
 - `mb`: lgbm/xgb için `max_bin=1024` (özellik değil, model ayarı)
+- `tedig`: hanelerin hedef kodlaması; `freq2`: tüm sütunların ve hanelerin normalize frekansı;
+  `flag`: gelir eşik bölgeleri (30k, >=170537, 38-42k) ve çevre ilgisi 1
 
 Deneyler (LightGBM, öğrenme oranı 0.1, 5 kat CV AUC):
 
@@ -104,8 +106,26 @@ Ayar araması (`trials=50`, XGBoost, taban,bins,dig2,te3, lr 0.1, Kaggle T4, 35 
 `reg_lambda=0.6968,reg_alpha=0.009999,max_bin=512`). En iyi denemelerin çoğu derinlik 4, yüksek subsample,
 `max_bin` 512-1024; tepe düz (derinlik 4'lüler 0.94599-0.94606). Bu ayarlar lr 0.02'de `name=t1` ile
 kullanıldı: tohum 42/7/11 0.94612/0.94613/0.94611, ortalaması 0.94619 (ayarsız 0.94603).
-CatBoost (lr 0.05): taban,bins tohum 42/7 0.94603/0.94602 (ortalaması 0.94608); taban,bins,dig2,te3 0.94609
-(29 dk).
+CatBoost (lr 0.05): taban,bins tohum 42/7 0.94603/0.94602 (ortalaması 0.94608); taban,bins,dig2,te3 tohum
+42/7 0.94609/0.94609 (27-29 dk).
+
+`t1` XGBoost lr 0.1'de taban,bins,dig2,te3 üstüne: 0.94605; +tedig 0.94601, +freq2 0.94602, +flag 0.94604,
+üçü birden 0.94600 (katkı yok). LightGBM açık not defterinin ayarlarıyla (`max_depth=5,num_leaves=32,`
+`min_child_samples=10,subsample=0.812763,colsample_bytree=0.30293,reg_alpha=0.07094,reg_lambda=2.03303,`
+`max_bin=1024`, `name=pubp`) aynı setle lr 0.02: 0.94608 (bizim ayarlarla 0.94593, 9 dk yerel CPU).
+
+Sinir ağı (`nn`, Kaggle T4, lr 0.002, aynı set): 12 epoch 0.94525, 30 epoch 0.94520; `lowcat=100` gömmeleri
+aşırı öğreniyor (0.94228, geniş 0.94205). XGBoost ile sıra korelasyonu 0.993 (CatBoost 0.997) ama harmana
+katkısı yok.
+
+### Açık not defterleri (`public/`)
+En iyi açık not defterlerinin uyarlamaları; kendi Kaggle not defterlerinde koşar, `oof_/pred_pub_*.npy`
+yazar ve `blend.py` ile harmanlanır (yazarlar dosya başında):
+- `pub_lgbm.py` (najiama, LightGBM, 5 kat, katlar `train.py` ile aynı): CV 0.94609 (Kaggle CPU, ~20 dk)
+- `pub_xgb.py` (evgendvorkin, XGBoost, 10 kat, GPU)
+Kaggle'da çalıştırmak için dosyayı `kernel-metadata.json` (`enable_gpu`, yarışma ve orijinal veri kaynakları)
+ile bir klasöre koyup `kaggle kernels push -p <klasör>`, bitince
+`kaggle kernels output <kullanıcı>/<slug> -p <klasör>`.
 
 ## Gönderimler
 Dosya adı `pevpsubmissionN.csv`.

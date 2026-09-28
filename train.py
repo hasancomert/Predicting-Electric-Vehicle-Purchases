@@ -5,8 +5,8 @@ emb, epochs, bs, wd, lowcat (en çok bu kadar farklı değerli sayısallara da g
 Ayarlar (virgülle, ör. max_depth=7,subsample=0.9) modelin varsayılanlarını ezer ve etikete eklenir;
 seed=N model ve hedef kodlama tohumu (katlar sabit), name=ad etikette ayarların yerine geçer,
 trials=N Optuna ile N deneme arar (dosya yazmaz, en iyi ayarları basar; şimdilik xgb).
-Gruplar (virgülle): base, freq, dig, dig2, recipe, omean, te1, te3, bins, bins2, te2, te2s, ted, ncat,
-orig, mb (lgbm/xgb max_bin=1024) (README'de sonuçlar)
+Gruplar (virgülle): base, freq, freq2, dig, dig2, recipe, omean, flag, te1, te3, bins, bins2, tedig, te2,
+te2s, ted, ncat, orig, mb (lgbm/xgb max_bin=1024) (README'de sonuçlar)
 PVEP_GPU=1 ile xgb ve cat GPU'da eğitilir, etikete _gpu eklenir (kaggle_run.py bunu ayarlar)."""
 import os
 import sys
@@ -70,12 +70,25 @@ if "dig" in groups:  # gelir/mesafe hane izleri
     F["inc_mod100"] = inc % 100
     F["inc_mod1000"] = inc % 1000
     F["com_dec"] = (allx.Daily_Commute_km * 10).round() % 10
-if "dig2" in groups:  # sayısal sütunların tek tek haneleri (10^-1..10^4), sabit ve kopya olanlar hariç
+DIG = {}  # sayısal sütunların tek tek haneleri (10^-1..10^4), sabit ve kopya olanlar hariç
+if groups & {"dig2", "tedig", "freq2"}:
     for c in NUMS:
         for k in range(-1, 5):
             d = np.floor(np.round(allx[c] / 10.0 ** k, 6)) % 10
             if d.nunique() > 1 and not np.allclose(d.fillna(-1), allx[c].fillna(-1)):
-                F[f"{c}_d{k}"] = d
+                DIG[f"{c}_d{k}"] = d
+if "dig2" in groups:
+    for k, d in DIG.items():
+        F[k] = d
+if "freq2" in groups:  # tüm sütunların ve hanelerin normalize frekansı
+    for k, v in {**{c: allx[c] for c in COLS}, **DIG}.items():
+        F[k + "_fq"] = v.map(v.value_counts(normalize=True))
+if "flag" in groups:  # gelir eşik bölgeleri ve çevre ilgisi 1
+    inc = allx.Annual_Income_USD
+    F["is_30k"] = (inc == 30000).astype(float)
+    F["is_cliff"] = (inc >= 170537).astype(float)
+    F["is_dead"] = ((inc >= 38000) & (inc <= 42000)).astype(float)
+    F["is_env1"] = (allx.Environmental_Concern_Level == 1).astype(float)
 if "recipe" in groups:  # orijinal verinin üretim formülleri, gürültüsüz kısım (C. Deotte'nin EDA'sı)
     anx = allx.Range_Anxiety_Level
     F["buy_score"] = (1.2 * allx.Annual_Income_USD / 1e5 + 0.6 * allx.Environmental_Concern_Level
@@ -98,6 +111,8 @@ if "bins" in groups:  # gelir /100, /1000 ve tam km: kaba ölçekte anahtarlar
     bins.update(inc_100=inc // 100, inc_1000=inc // 1000, com_int=com // 1)
 if "bins2" in groups:  # ek ölçekler
     bins.update(inc_10=inc // 10, inc_500=inc // 500, inc_5000=inc // 5000, com_5=com // 5)
+if "tedig" in groups:  # hanelerin hedef kodlaması
+    bins.update(DIG)
 for k, v in bins.items():
     keys[k] = pd.factorize(v)[0].astype(np.int64) + 1
 if "ted" in groups:  # hane izlerinin hedef kodlaması
