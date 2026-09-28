@@ -1,0 +1,99 @@
+"""train.py'yi Kaggle'da özel bir GPU not defterinde (T4) çalıştırır, bitince oof_/pred_*.npy
+dosyalarını buraya indirir. xgb ve cat GPU'da, lgbm CPU'da eğitilir (GPU etiketine _gpu eklenir).
+Kullanım: python kaggle_run.py "xgb base,freq,dig,te1 0.02" "cat base,freq,dig,te1 0.05"
+          python kaggle_run.py --fetch   # son sürümü bekle, günlüğü göster, çıktıyı indir"""
+import json
+import os
+import shutil
+import sys
+import time
+
+from kaggle import api
+
+SLUG, BUILD = "pvep-train", "kernel_build"
+REF = f"{api.get_config_value('username')}/{SLUG}"
+GROUPS = {"base", "freq", "dig", "te1", "te2", "te2s", "ted", "ncat", "orig"}
+
+# Not defterinde çalışan kod; başına JOBS ve TRAIN (train.py'nin metni) eklenir.
+BODY = """import glob, os, shutil, subprocess, sys
+import pandas, sklearn, lightgbm, xgboost, catboost
+print(*(f"{m.__name__} {m.__version__}" for m in (pandas, sklearn, lightgbm, xgboost, catboost)),
+      flush=True)
+
+def find(name):
+    return sorted(glob.glob(f"/kaggle/input/**/{name}", recursive=True))[0]
+
+os.makedirs("/tmp/pvep", exist_ok=True)
+os.chdir("/tmp/pvep")  # çıktıya yalnızca .npy dosyaları gitsin
+for src, dst in [("train.csv", "train.csv"), ("test.csv", "test.csv"),
+                 ("EV_Adoption_and_Range_Anxiety_Dataset.csv", "original.csv")]:
+    os.symlink(find(src), dst)
+with open("train.py", "w") as f:
+    f.write(TRAIN)
+env = dict(os.environ, PVEP_GPU="1" if shutil.which("nvidia-smi") else "0")
+for job in JOBS:
+    print(">>", job, flush=True)
+    subprocess.run([sys.executable, "train.py", *job.split()], env=env, check=True)
+    for f in glob.glob("*.npy"):
+        shutil.move(f, "/kaggle/working/")
+"""
+
+
+def push(jobs):
+    for job in jobs:
+        model, groups, *lr = job.split()
+        if model not in ("lgbm", "xgb", "cat") or not set(groups.split(",")) <= GROUPS \
+                or len(lr) > 1 or lr and float(lr[0]) <= 0:
+            sys.exit(f"hatalı iş: {job!r}")
+    shutil.rmtree(BUILD, ignore_errors=True)
+    os.makedirs(BUILD)
+    with open("train.py", encoding="utf-8") as f:
+        train = f.read()
+    with open(f"{BUILD}/run.py", "w", encoding="utf-8") as f:
+        f.write(f"JOBS = {jobs!r}\nTRAIN = {train!r}\n" + BODY)
+    meta = dict(id=REF, title=SLUG, code_file="run.py", language="python", kernel_type="script",
+                is_private=True, enable_gpu=True, enable_tpu=False, enable_internet=False,
+                machine_shape="NvidiaTeslaT4", competition_sources=["playground-series-s6e9"],
+                dataset_sources=["itzzomkar/ev-adoption-behavior-and-range-anxiety"],
+                kernel_sources=[], model_sources=[])
+    with open(f"{BUILD}/kernel-metadata.json", "w") as f:
+        json.dump(meta, f, indent=2)
+    r = api.kernels_push(BUILD)
+    if r is None or r.error:
+        sys.exit(f"push hatası: {r and r.error}")
+    print(f"sürüm {r.versionNumber}: {r.url}", flush=True)
+
+
+def fetch():
+    last = None
+    while True:
+        time.sleep(30)
+        s = api.kernels_status(REF)
+        if s.status.name != last:
+            last = s.status.name
+            print(time.strftime("%H:%M:%S"), last, flush=True)
+        if last in ("COMPLETE", "ERROR", "CANCEL_ACKNOWLEDGED"):
+            break
+    log = api.kernels_logs(REF)
+    try:
+        entries = json.loads(log)
+        out = "".join(e["data"] for e in entries if e.get("stream_name") == "stdout")
+        err = "".join(e["data"] for e in entries if e.get("stream_name") == "stderr")
+    except (ValueError, TypeError, KeyError):
+        out, err = log, ""
+    print(out)
+    if last != "COMPLETE":
+        sys.exit(f"{err[-3000:]}\n{last}: {s.failure_message}")
+    files, _ = api.kernels_output(REF, f"{BUILD}/out", file_pattern=r"\.npy$", force=True)
+    for f in files:
+        shutil.move(f, os.path.basename(f))
+        print("indirildi:", os.path.basename(f))
+
+
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    if not args:
+        sys.exit(__doc__)
+    if args != ["--fetch"]:
+        push(args)
+    fetch()

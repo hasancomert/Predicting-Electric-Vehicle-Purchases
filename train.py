@@ -1,6 +1,8 @@
 """Özellik grupları + model, 5 katlı CV; oof_<etiket>.npy ve pred_<etiket>.npy yazar.
 Kullanım: python train.py <lgbm|xgb|cat> <gruplar> [öğrenme oranı, varsayılan 0.1]
-Gruplar (virgülle): base, freq, dig, te1, te2, te2s, ted, ncat, orig (README'de sonuçlar)"""
+Gruplar (virgülle): base, freq, dig, te1, te2, te2s, ted, ncat, orig (README'de sonuçlar)
+PVEP_GPU=1 ile xgb ve cat GPU'da eğitilir, etikete _gpu eklenir (kaggle_run.py bunu ayarlar)."""
+import os
 import sys
 import time
 from itertools import combinations
@@ -24,6 +26,7 @@ COLS = NUMS + CATS
 
 model_name, groups = sys.argv[1], set(sys.argv[2].split(","))
 LR = float(sys.argv[3]) if len(sys.argv) > 3 else 0.1
+GPU = os.environ.get("PVEP_GPU") == "1" and model_name != "lgbm"  # pip LightGBM'i CUDA'sız
 
 train, test, orig = (pd.read_csv(f) for f in ("train.csv", "test.csv", "original.csv"))
 y = (train[TARGET] == "Yes").to_numpy(int)
@@ -99,8 +102,8 @@ def lgbm(Xtr, ytr, Xva, yva, Xte):
 def xgbm(Xtr, ytr, Xva, yva, Xte):
     mdl = xgb.XGBClassifier(n_estimators=20000, learning_rate=LR, max_depth=6,
                             min_child_weight=5, subsample=0.8, colsample_bytree=0.5,
-                            reg_lambda=1.0, tree_method="hist", enable_categorical=True,
-                            max_cat_to_onehot=4, eval_metric="auc",
+                            reg_lambda=1.0, tree_method="hist", device="cuda" if GPU else "cpu",
+                            enable_categorical=True, max_cat_to_onehot=4, eval_metric="auc",
                             early_stopping_rounds=int(20 / LR), random_state=SEED, n_jobs=4)
     mdl.fit(Xtr, ytr, eval_set=[(Xva, yva)], verbose=False)
     return mdl.predict_proba(Xva)[:, 1], mdl.predict_proba(Xte)[:, 1], mdl.best_iteration
@@ -110,6 +113,7 @@ def cat(Xtr, ytr, Xva, yva, Xte):
     s = lambda d: d.astype({c: str for c in CATS})
     mdl = CatBoostClassifier(iterations=20000, learning_rate=LR, depth=6, eval_metric="AUC",
                              od_type="Iter", od_wait=int(20 / LR), cat_features=CATS,
+                             task_type="GPU" if GPU else "CPU",
                              random_seed=SEED, verbose=0, allow_writing_files=False)
     mdl.fit(s(Xtr), ytr, eval_set=(s(Xva), yva))
     return (mdl.predict_proba(s(Xva))[:, 1], mdl.predict_proba(s(Xte))[:, 1],
@@ -123,7 +127,7 @@ for i, (tr, va) in enumerate(folds):
     oof[va], p, it = {"lgbm": lgbm, "xgb": xgbm, "cat": cat}[model_name](Xtr, ytr, Xva, y[va], Xte)
     pred += p / FOLDS
     print(f"  fold {i}: {roc_auc_score(y[va], oof[va]):.5f} ({it} it)", flush=True)
-tag = f"{model_name}_{'+'.join(sorted(groups))}_{LR}"
+tag = f"{model_name}_{'+'.join(sorted(groups))}_{LR}" + ("_gpu" if GPU else "")
 print(f"{tag} CV AUC: {roc_auc_score(y, oof):.5f}  "
       f"[{time.time() - t0:.0f} sn, {Xtr.shape[1]} özellik]", flush=True)
 np.save(f"oof_{tag}.npy", oof)
