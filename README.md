@@ -101,7 +101,11 @@ Dosya adı `pevpsubmissionN.csv`.
 |---|---|---|---|
 | 1 | LightGBM 0.6 + CatBoost 0.4, ham özellikler | 0.94201 | 0.94176 |
 | 2 | XGBoost 0.5 + CatBoost 0.5, base,freq,dig,te1 | 0.94575 | 0.94587 |
+| 3 | XGBoost 0.5 (+bins,dig2,te3) + CatBoost 0.5 (+bins) | 0.94612 | |
 
 1. gönderimin tek modelleri: LightGBM 0.94190 (~3 dk), CatBoost 0.94178 (~22 dk, 4 çekirdek CPU).
 2. gönderimin tek modelleri (base,freq,dig,te1): LightGBM lr 0.02 0.94562 (5.5 dk),
 XGBoost lr 0.02 0.94566 (7 dk), CatBoost lr 0.05 0.94568 (24 dk). Hill climbing LightGBM'i almadı.
+3. gönderimin tek modelleri: XGBoost lr 0.02 base,freq,dig,dig2,te1,te3,bins 0.94603 (Kaggle T4, 3 dk),
+LightGBM aynı gruplarla lr 0.02 0.94593 (Kaggle CPU, 13 dk), CatBoost lr 0.05 base,freq,dig,te1,bins 0.94603
+(yerel CPU, 24 dk). Hill climbing yine LightGBM'i almadı (XGBoost + LightGBM harmanı 0.94605).
