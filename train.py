@@ -1,5 +1,7 @@
 """Özellik grupları + model, 5 katlı CV; oof_<etiket>.npy ve pred_<etiket>.npy yazar.
-Kullanım: python train.py <lgbm|xgb|cat> <gruplar> [öğrenme oranı, varsayılan 0.1] [ayarlar]
+Kullanım: python train.py <lgbm|xgb|cat|nn> <gruplar> [öğrenme oranı, varsayılan 0.1] [ayarlar]
+nn: PyTorch MLP (sayısallar normal kantile, kategorikler gömme); lr ~0.002, ayarlar d, layers, drop,
+emb, epochs, bs, wd, lowcat (en çok bu kadar farklı değerli sayısallara da gömme).
 Ayarlar (virgülle, ör. max_depth=7,subsample=0.9) modelin varsayılanlarını ezer ve etikete eklenir;
 seed=N model ve hedef kodlama tohumu (katlar sabit), name=ad etikette ayarların yerine geçer,
 trials=N Optuna ile N deneme arar (dosya yazmaz, en iyi ayarları basar; şimdilik xgb).
@@ -168,7 +170,75 @@ def cat(Xtr, ytr, Xva, yva, Xte, **p):
             mdl.get_best_iteration())
 
 
-MODELS = {"lgbm": lgbm, "xgb": xgbm, "cat": cat}
+def nn(Xtr, ytr, Xva, yva, Xte, **p):
+    import torch
+    from sklearn.preprocessing import QuantileTransformer
+    q = dict(d=512, layers=3, drop=0.2, emb=8, epochs=12, bs=2048, wd=1e-4, lowcat=0) | p
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    torch.manual_seed(MSEED)
+    cats = [c for c in Xtr.columns if isinstance(Xtr[c].dtype, pd.CategoricalDtype)]
+    nums = [c for c in Xtr.columns if c not in cats]
+    qt = QuantileTransformer(n_quantiles=1000, output_distribution="normal", subsample=200_000,
+                             random_state=MSEED).fit(Xtr[nums])
+    low = {c: np.sort(Xtr[c].unique()) for c in nums if Xtr[c].nunique() <= q["lowcat"]}
+    cards = [len(Xtr[c].cat.categories) for c in cats] + [len(v) for v in low.values()]
+    def lcode(x, v):  # değerin v içindeki sırası + 1, görülmemiş değer 0
+        i = np.clip(np.searchsorted(v, x), 0, len(v) - 1)
+        return np.where(v[i] == x, i + 1, 0)
+    codes = lambda d: np.stack([d[c].cat.codes.to_numpy() + 1 for c in cats]
+                               + [lcode(d[c].to_numpy(), v) for c, v in low.items()], 1)
+    tens = lambda d: (torch.tensor(qt.transform(d[nums]), dtype=torch.float32, device=dev),
+                      torch.tensor(codes(d), dtype=torch.long, device=dev))
+    (tn, tc), (vn, vc), (en, ec) = tens(Xtr), tens(Xva), tens(Xte)
+    yt = torch.tensor(ytr, dtype=torch.float32, device=dev)
+
+    class Net(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.embs = torch.nn.ModuleList(torch.nn.Embedding(k + 1, q["emb"]) for k in cards)
+            w, layers = len(nums) + q["emb"] * len(cards), []
+            for _ in range(q["layers"]):
+                layers += [torch.nn.Linear(w, q["d"]), torch.nn.BatchNorm1d(q["d"]),
+                           torch.nn.SiLU(), torch.nn.Dropout(q["drop"])]
+                w = q["d"]
+            self.mlp = torch.nn.Sequential(*layers, torch.nn.Linear(w, 1))
+
+        def forward(self, xn, xc):
+            e = [m(xc[:, i]) for i, m in enumerate(self.embs)]
+            return self.mlp(torch.cat([xn, *e], 1)).squeeze(1)
+
+    net = Net().to(dev)
+    opt = torch.optim.AdamW(net.parameters(), lr=LR, weight_decay=q["wd"])
+    steps = -(-len(yt) // q["bs"])
+    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=LR, total_steps=q["epochs"] * steps)
+    loss_fn = torch.nn.BCEWithLogitsLoss()
+
+    def predict(xn, xc):
+        net.eval()
+        with torch.no_grad():
+            out = [torch.sigmoid(net(xn[i:i + 65536], xc[i:i + 65536]))
+                   for i in range(0, len(xn), 65536)]
+        return torch.cat(out).cpu().numpy()
+
+    best, best_ep, state = -1, 0, None
+    for ep in range(q["epochs"]):
+        net.train()
+        perm = torch.randperm(len(yt), device=dev)
+        for i in range(steps):
+            b = perm[i * q["bs"]:(i + 1) * q["bs"]]
+            opt.zero_grad()
+            loss_fn(net(tn[b], tc[b]), yt[b]).backward()
+            opt.step()
+            sched.step()
+        auc = roc_auc_score(yva, predict(vn, vc))
+        if auc > best:  # doğrulama AUC'si en iyi epoch'un ağırlıkları
+            best, best_ep = auc, ep + 1
+            state = {k: v.detach().clone() for k, v in net.state_dict().items()}
+    net.load_state_dict(state)
+    return predict(vn, vc), predict(en, ec), best_ep
+
+
+MODELS = {"lgbm": lgbm, "xgb": xgbm, "cat": cat, "nn": nn}
 SPACE = {  # Optuna arama uzayları (öğrenme oranı komut satırındaki)
     "xgb": lambda t: dict(
         max_depth=t.suggest_int("max_depth", 4, 10),

@@ -44,7 +44,7 @@ for job in JOBS:
 def push(jobs):
     for job in jobs:
         model, groups, *rest = job.split()  # rest: [öğrenme oranı [ayarlar]]
-        if model not in ("lgbm", "xgb", "cat") or not set(groups.split(",")) <= GROUPS \
+        if model not in ("lgbm", "xgb", "cat", "nn") or not set(groups.split(",")) <= GROUPS \
                 or len(rest) > 2 or rest and float(rest[0]) <= 0:
             sys.exit(f"hatalı iş: {job!r}")
     shutil.rmtree(BUILD, ignore_errors=True)
