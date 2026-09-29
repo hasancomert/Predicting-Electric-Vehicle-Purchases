@@ -49,7 +49,8 @@ if CF10:
 XT, CT = "xgb_base+bins+dig+dig2+freq+te1+te3+tok_0.02_t1", "cat_base+bins+dig+dig2+freq+te1+te3+tok_0.05_d5"
 for k, tags in {"our_xgb_tok_f10": [f"{XT}_f10_gpu", f"{XT}_s7_f10_gpu", f"{XT}_s11_f10_gpu"],
                 "our_cat_tok_f10": [f"{CT}_f10", f"{CT}_s7_f10"],
-                "our_lgbm_tok_f10": ["lgbm_base+bins+dig+dig2+freq+te1+te3+tok_0.02_pubp_f10"],
+                "our_lgbm_tok_f10": ["lgbm_base+bins+dig+dig2+freq+te1+te3+tok_0.02_pubp_f10",
+                                     "lgbm_base+bins+dig+dig2+freq+te1+te3+tok_0.02_pubp_s7_f10"],
                 "our_realmlp_tok_f10": [f[4:-4] for f in sorted(glob.glob("oof_pub_realmlp_tok_f10_s*.npy"))]}.items():
     tags = [t for t in tags if os.path.exists(f"oof_{t}.npy")]
     if tags:
