@@ -143,6 +143,12 @@ T4, tohum başına ~5 dk): 0.94594-0.94604, ortalaması 0.94619. CatBoost derinl
 derinlik 8 (GPU) 0.94592. Son seçim (6. gönderim): RealMLP 6 tohum 0.286, CatBoost derinlik 5, naji üçlü TE
 XGBoost 10 kat, megayak A, B, D (her biri 0.143); CV 0.94642, iç içe 0.94641.
 
+10 katlı yeniden eğitim (`train.py ... folds=10`, `PVEP_FOLDS=10`; tohum 42'de bölme megayak kütüphanesiyle aynı),
+her modelde ~+0.0001: RealMLP 6 tohum 0.94611-0.94614 (ortalaması 0.94624; 5 katta 0.94619), XGBoost `t1` tohum
+42/7/11 0.94625/0.94623/0.94625 (ortalaması 0.94631, Kaggle T4 ~7 dk), CatBoost d5 0.94622 (yerel CPU 79 dk).
+7. gönderim: RealMLP 10 kat 0.333, XGBoost 10 kat, CatBoost d5 10 kat, megayak B, D (her biri 0.167); CV 0.94644,
+iç içe 0.94643.
+
 ### Açık not defterleri (`public/`)
 En iyi açık not defterlerinin uyarlamaları; kendi Kaggle not defterlerinde koşar, `oof_/pred_pub_*.npy`
 yazar ve `blend.py` ile harmanlanır (yazarlar dosya başında):
@@ -163,6 +169,7 @@ Dosya adı `pevpsubmissionN.csv`.
 | 4 | XGBoost `t1` 3 tohum 0.75 + CatBoost (+bins,dig2,te3) 0.25 | 0.94621 | 0.94637 |
 | 5 | XGBoost `t1` 3 tohum, CatBoost 2 tohum, `pub_lgbm`, `pub_xgb` (her biri 0.25) | 0.94626 | 0.94637 |
 | 6 | sıra uzayında, açık OOF kütüphaneleri + RealMLP 6 tohum (`blend_ext.py`, aşağıda) | 0.94642 (iç içe 0.94641) | 0.94642 |
+| 7 | 6. gönderimin yapısı, kendi modellerimiz 10 katla (`folds=10`) | 0.94644 (iç içe 0.94643) | |
 
 1. gönderimin tek modelleri: LightGBM 0.94190 (~3 dk), CatBoost 0.94178 (~22 dk, 4 çekirdek CPU).
 2. gönderimin tek modelleri (base,freq,dig,te1): LightGBM lr 0.02 0.94562 (5.5 dk),
