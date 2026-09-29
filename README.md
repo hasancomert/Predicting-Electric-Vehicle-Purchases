@@ -170,6 +170,8 @@ Kat bölme tohumu 7/11 ile 0.94639/0.94638, üçünün ortalaması 0.94643. L2 d
 0.94639 / 0.94640 / 0.94640. Aynı özellik matrisiyle XGBoost
 (`pvep-pbe-xgb`) 0.94636. XGBoost ayar araması tok'lu setle (40 deneme, lr 0.1): en iyi 0.94629, `t2` ayarları
 (derinlik 4, `max_bin` 1024, daha az L2) 10 katta tok+chain 0.94650/0.94646, `t1` ile aynı düzey.
+20 kat (10 yerine): XGBoost tok+chain 0.94651/0.94653 (ortalaması 0.94656, 10 katta 0.94656 3 tohumla),
+GLR 0.94640 -> 0.94644, RealMLP+tok tek tohum 0.94637 -> 0.94641.
 
 ### Tam veri eğitimi benzetimi (sonuç: kazanç yok)
 `train.py ... hold=h,folds=9,full=1.1`: train'in %10'u etiketli sahte test, kalan %90 ile 9 katlı CV ve tam
@@ -237,6 +239,7 @@ Dosya adı `pevpsubmissionN.csv`.
 | 11 | GPT-2 parçaları (`tok`): XGBoost `t1`+tok 10 kat 3 tohum 0.5, RealMLP+tok 0.125, RealMLP 10 kat 0.125, residual-stack v19 0.125, BlamerX 0.125, ölü bölge | 0.94661 (iç içe 0.94660) | **0.94667** |
 | 12 | tok'lu modeller: CatBoost d5+tok, LightGBM tok+chain, XGBoost tok+chain 2 tohum, RealMLP+tok 5 tohum, residual-stack v19 (her biri 0.143), P. B. Elefante GLR (0.94640; 0.286), ölü bölge | 0.94667 (iç içe 0.94666) | **0.94671** |
 | 13 | 12. + XGBoost tok+chain 3 tohum ve `t2` ayarları, GLR 3 kat tohumu (42/7/11) ortalaması, GLR özellikleriyle XGBoost (0.94636), RealMLP+tok 6 tohum; ağırlıklar XGB tok+chain / RealMLP+tok / GLR 0.2, GLR-XGB, LightGBM tok+chain, megayak D, residual-stack v19 0.1 | 0.94669 (iç içe 0.94667) || **0.94671** |
+| 14 | 13. + 20 kat (her model verinin %95'i): XGBoost tok+chain 20 kat 2 tohum 0.2 (10 kat yerine), GLR 20 kat 0.1 (+ 3 tohumlu 10 kat 0.1) | 0.94669 (iç içe 0.94668) | |
 
 1. gönderimin tek modelleri: LightGBM 0.94190 (~3 dk), CatBoost 0.94178 (~22 dk, 4 çekirdek CPU).
 2. gönderimin tek modelleri (base,freq,dig,te1): LightGBM lr 0.02 0.94562 (5.5 dk),
