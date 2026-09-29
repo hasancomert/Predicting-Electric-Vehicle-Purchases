@@ -1,6 +1,7 @@
 """Kendi modellerimiz + açık OOF kütüphaneleri (ext/) üzerinde sıra uzayında hill climbing.
 Ağırlıklar iç içe CV ile de ölçülür (4 katta seçilir, 5.'de değerlendirilir), aşırı öğrenme görünsün.
 Kullanım: python blend_ext.py pevpsubmission6 [aday,aday,...]   (aday verilmezse hepsi, sinir ağımız hariç)
+FULLMIX=w: kendi modellerimizin test tahmininde tam veri modellerinin payı (aşağıda).
 DEADZONE=1: gelir 38174-41384 (trende 1257 satır, hiç alım yok; kurallar görülmemiş katta sınandı) en alta itilir.
 ext/ için: kaggle datasets download -d najiama/s6e9-oof -p ext/s6e9-oof --unzip
            kaggle datasets download -d megayak/s6e9-six-feature-views-oof-library \\
@@ -74,6 +75,19 @@ for fo, ft in [("oof_six_views.csv", "test_six_views.csv"), ("oof_realmlp_g.csv"
     for c in [c for c in ft if c not in ("id", "ensemble")]:
         k = "mv_" + (c if c.startswith("G_") else c[0])  # mv_A..mv_F, mv_G_realmlp_...
         O[k], P[k] = rank(aligned(fo, tr.id, c)), rank(aligned(ft, te.id, c))
+
+# FULLMIX=w: kendi bileşenlerimizin test tahmini = (1-w) x 10 katlı modellerin ortalaması + w x tüm train ile eğitilmiş
+# model(ler) (train.py full=/fullnit=, pub_realmlp.py PVEP_FULL=1). Ağırlıklar yine OOF'tan; yalnız test tahmini değişir.
+FULLMIX = float(os.environ.get("FULLMIX", "0"))
+FULLMAP = {"our_realmlp_f10": sorted(glob.glob("pred_pub_realmlp_full_s*.npy")),
+           "our_xgb_f10": [f"pred_{t}_full.npy" for t in XF10 if os.path.exists(f"pred_{t}_full.npy")],
+           "our_cat_d5_f10": [f for f in [f"pred_{C}_d5_f10_full.npy"] if os.path.exists(f)]}
+for k, files in FULLMAP.items():
+    if FULLMIX and k in P and files:
+        pf = rank(np.mean([np.load(f) for f in files], axis=0))
+        print(f"{k}: test tahmininin %{FULLMIX * 100:.0f}'i tam veri modellerinden ({len(files)} dosya), "
+              f"10 katlı ortalamayla sıra korr. {np.corrcoef(pf, P[k])[0, 1]:.5f}")
+        P[k] = rank((1 - FULLMIX) * P[k] + FULLMIX * pf)
 
 # Diğer açık OOF kütüphanelerinden harmana katkı yapan üçü (25 aday tek tek denendi, gerisi 0 ağırlık aldı):
 # legtarrr/s6e9-residual-stack-oof (v19 ve jazivxt'in "zoom zoom" modeli) ve medvax/s6e9-medvax-blamerx-oof-predictions.

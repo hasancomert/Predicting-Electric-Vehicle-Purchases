@@ -3,13 +3,16 @@ https://www.kaggle.com/code/yekenot/ps-s6-e9-realmlp-pytorch
 Değişen yalnızca: not defteri komutları (%%time) kaldırıldı, veri yolları (Kaggle'da glob), tohum
 PVEP_SEED ortam değişkeninden (varsayılan 42; katlar, başlangıç ve hedef kodlama bu tohumla), kat sayısı
 PVEP_FOLDS'tan (varsayılan 5), PVEP_PLUS=1 ile gelir haneleri ve ham sütunların hedef kodlaması eklenir
-(pvep eki); çıktı oof_/pred_pub_realmlp[_plus][_f<kat>]_s<tohum>.npy. 5 katta tohum 42'nin
+(pvep eki), PVEP_FULL=1 ile CV'siz tüm train (yalnız pred_pub_realmlp[_plus]_full_s<tohum>.npy);
+çıktı oof_/pred_pub_realmlp[_plus][_f<kat>]_s<tohum>.npy. 5 katta tohum 42'nin
 katları train.py ile aynı. GPU."""
 import glob, os
 SEED0 = int(os.environ.get("PVEP_SEED", "42"))
 FOLDS0 = int(os.environ.get("PVEP_FOLDS", "5"))
 PLUS = os.environ.get("PVEP_PLUS") == "1"  # pvep eki: gelir haneleri + ham sütunların hedef kodlaması
-OUT = f"pub_realmlp{'_plus' if PLUS else ''}{'' if FOLDS0 == 5 else f'_f{FOLDS0}'}_s{SEED0}"
+FULL0 = os.environ.get("PVEP_FULL") == "1"  # pvep eki: CV yok, tüm train ile tek model, yalnız test tahmini
+OUT = (f"pub_realmlp{'_plus' if PLUS else ''}"
+       f"{'_full' if FULL0 else ('' if FOLDS0 == 5 else f'_f{FOLDS0}')}_s{SEED0}")
 
 
 def find(name):
@@ -880,6 +883,20 @@ FOLDS = FOLDS0
 SEED = SEED0
 TE = True
 # ----- cell
+if FULL0:  # pvep eki: tüm train; doğrulama kümesi train'in bir parçası, yalnız epoch seçimi için
+    X_tr, y_tr, X_tst = X.copy(), y, X_test.copy()
+    X_val, y_val = X.iloc[:20000].copy(), y.iloc[:20000]
+    te_cols = combo_names + (RAW_COLS if PLUS else [])
+    enc = TargetEncoder(cv=FOLDS, smooth='auto', shuffle=True, random_state=SEED)
+    te_names = [f"_{col}TE" for col in te_cols]
+    X_tr[te_names] = enc.fit_transform(X_tr[te_cols], y_tr)
+    X_val[te_names] = enc.transform(X_val[te_cols])
+    X_tst[te_names] = enc.transform(X_tst[te_cols])
+    model = RealMLP_TD_Classifier(**CONFIG)
+    model.fit(X_tr, y_tr, X_val, y_val, cat_col_names=cat_cols)
+    np.save(f'pred_{OUT}.npy', model.predict_proba(X_tst)[:, 1])
+    print(f"{OUT}: tüm train ile eğitildi", flush=True)
+    raise SystemExit
 skf = StratifiedKFold(n_splits=FOLDS, shuffle=True, random_state=SEED)
 oof_preds = np.zeros(len(X))
 test_preds = np.zeros(len(X_test))

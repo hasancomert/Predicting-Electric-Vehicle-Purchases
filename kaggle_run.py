@@ -61,6 +61,9 @@ def push(jobs):
     with open(f"{BUILD}/kernel-metadata.json", "w") as f:
         json.dump(meta, f, indent=2)
     r = api.kernels_push(BUILD)
+    while r is not None and r.error and "Maximum batch GPU" in r.error:  # GPU slotları dolu: bekle
+        time.sleep(60)
+        r = api.kernels_push(BUILD)
     if r is None or r.error:
         sys.exit(f"push hatası: {r and r.error}")
     print(f"sürüm {r.versionNumber}: {r.url}", flush=True)
