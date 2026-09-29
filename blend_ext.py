@@ -3,7 +3,8 @@ Ağırlıklar iç içe CV ile de ölçülür (4 katta seçilir, 5.'de değerlend
 Kullanım: python blend_ext.py pevpsubmission6 [aday,aday,...]   (aday verilmezse hepsi, sinir ağımız hariç)
 ext/ için: kaggle datasets download -d najiama/s6e9-oof -p ext/s6e9-oof --unzip
            kaggle datasets download -d megayak/s6e9-six-feature-views-oof-library \\
-               -p ext/s6e9-six-feature-views-oof-library --unzip"""
+               -p ext/s6e9-six-feature-views-oof-library --unzip
+           (isteğe bağlı) legtarrr/s6e9-residual-stack-oof, medvax/s6e9-medvax-blamerx-oof-predictions"""
 import glob
 import os
 import sys
@@ -72,6 +73,16 @@ for fo, ft in [("oof_six_views.csv", "test_six_views.csv"), ("oof_realmlp_g.csv"
     for c in [c for c in ft if c not in ("id", "ensemble")]:
         k = "mv_" + (c if c.startswith("G_") else c[0])  # mv_A..mv_F, mv_G_realmlp_...
         O[k], P[k] = rank(aligned(fo, tr.id, c)), rank(aligned(ft, te.id, c))
+
+# Diğer açık OOF kütüphanelerinden harmana katkı yapan üçü (25 aday tek tek denendi, gerisi 0 ağırlık aldı):
+# legtarrr/s6e9-residual-stack-oof (v19 ve jazivxt'in "zoom zoom" modeli) ve medvax/s6e9-medvax-blamerx-oof-predictions.
+for k, fo, ft in [("rs_v19", "s6e9-residual-stack-oof/v19_oof.csv", "s6e9-residual-stack-oof/v19_test.csv"),
+                  ("rs_jaz", "s6e9-residual-stack-oof/jaz_oof.csv", "s6e9-residual-stack-oof/jaz_test.csv"),
+                  ("medvax_blamerx", "s6e9-medvax-blamerx-oof-predictions/oof.csv",
+                   "s6e9-medvax-blamerx-oof-predictions/submission.csv")]:
+    if os.path.exists("ext/" + fo):
+        fo, ft = pd.read_csv("ext/" + fo), pd.read_csv("ext/" + ft)
+        O[k], P[k] = rank(aligned(fo, tr.id, "pred")), rank(aligned(ft, te.id, [c for c in ft if c != "id"][-1]))
 assert all(np.isfinite(v).all() for v in [*O.values(), *P.values()])
 
 
