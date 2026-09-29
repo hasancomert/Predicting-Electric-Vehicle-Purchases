@@ -3,8 +3,8 @@ Kullanım: python train.py <lgbm|xgb|cat|nn> <gruplar> [öğrenme oranı, varsay
 nn: PyTorch MLP (sayısallar normal kantile, kategorikler gömme); lr ~0.002, ayarlar d, layers, drop,
 emb, epochs, bs, wd, lowcat (en çok bu kadar farklı değerli sayısallara da gömme).
 Ayarlar (virgülle, ör. max_depth=7,subsample=0.9) modelin varsayılanlarını ezer ve etikete eklenir;
-seed=N model ve hedef kodlama tohumu (katlar sabit), name=ad etikette ayarların yerine geçer,
-trials=N Optuna ile N deneme arar (dosya yazmaz, en iyi ayarları basar; şimdilik xgb).
+seed=N model ve hedef kodlama tohumu (katlar sabit), folds=N kat sayısı (varsayılan 5), name=ad etikette
+ayarların yerine geçer, trials=N Optuna ile N deneme arar (dosya yazmaz, en iyi ayarları basar; şimdilik xgb).
 Gruplar (virgülle): base, freq, freq2, dig, dig2, recipe, omean, flag, te1, te3, bins, bins2, tedig, te2,
 te2s, ted, ncat, orig, mb (lgbm/xgb max_bin=1024) (README'de sonuçlar)
 PVEP_GPU=1 ile xgb ve cat GPU'da eğitilir, etikete _gpu eklenir (kaggle_run.py bunu ayarlar)."""
@@ -46,6 +46,7 @@ def num(v):  # "7" -> 7, "0.9" -> 0.9, diğerleri metin
 OVR = dict(kv.split("=") for kv in sys.argv[4].split(",")) if len(sys.argv) > 4 else {}
 OVR = {k: num(v) for k, v in OVR.items()}
 TRIALS, NAME, MSEED = OVR.pop("trials", 0), OVR.pop("name", None), OVR.pop("seed", SEED)
+FOLDS = OVR.pop("folds", FOLDS)  # 10 katta tohum 42 megayak OOF kütüphanesiyle aynı bölme
 GPU = os.environ.get("PVEP_GPU") == "1" and model_name != "lgbm"  # pip LightGBM'i CUDA'sız
 
 train, test, orig = (pd.read_csv(f) for f in ("train.csv", "test.csv", "original.csv"))
@@ -295,7 +296,8 @@ for i, (tr, va) in enumerate(folds):
     print(f"  fold {i}: {roc_auc_score(y[va], oof[va]):.5f} ({it} it)", flush=True)
 tag = (f"{model_name}_{'+'.join(sorted(groups))}_{LR}"
        + (f"_{NAME}" if NAME else "".join(f"_{k}={v}" for k, v in sorted(OVR.items())))
-       + (f"_s{MSEED}" if MSEED != SEED else "") + ("_gpu" if GPU else ""))
+       + (f"_s{MSEED}" if MSEED != SEED else "") + (f"_f{FOLDS}" if FOLDS != 5 else "")
+       + ("_gpu" if GPU else ""))
 print(f"{tag} CV AUC: {roc_auc_score(y, oof):.5f}  "
       f"[{time.time() - t0:.0f} sn, {Xtr.shape[1]} özellik]", flush=True)
 np.save(f"oof_{tag}.npy", oof)

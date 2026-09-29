@@ -1,10 +1,13 @@
 """Vladimir Demidov (yekenot) - "PS|S6|E9: RealMLP · PyTorch" açık Kaggle not defterinin uyarlaması:
 https://www.kaggle.com/code/yekenot/ps-s6-e9-realmlp-pytorch
 Değişen yalnızca: not defteri komutları (%%time) kaldırıldı, veri yolları (Kaggle'da glob), tohum
-PVEP_SEED ortam değişkeninden (varsayılan 42; katlar, başlangıç ve hedef kodlama bu tohumla) ve çıktı
-oof_/pred_pub_realmlp_s<tohum>.npy. 5 katlı StratifiedKFold; tohum 42'de katlar train.py ile aynı. GPU."""
+PVEP_SEED ortam değişkeninden (varsayılan 42; katlar, başlangıç ve hedef kodlama bu tohumla), kat sayısı
+PVEP_FOLDS'tan (varsayılan 5) ve çıktı oof_/pred_pub_realmlp[_f<kat>]_s<tohum>.npy. 5 katta tohum 42'nin
+katları train.py ile aynı. GPU."""
 import glob, os
 SEED0 = int(os.environ.get("PVEP_SEED", "42"))
+FOLDS0 = int(os.environ.get("PVEP_FOLDS", "5"))
+OUT = f"pub_realmlp{'' if FOLDS0 == 5 else f'_f{FOLDS0}'}_s{SEED0}"
 
 
 def find(name):
@@ -867,7 +870,7 @@ CONFIG = {
 }
 
 # --- Fold split ---
-FOLDS = 5
+FOLDS = FOLDS0
 SEED = SEED0
 TE = True
 # ----- cell
@@ -921,9 +924,9 @@ print(f"Overall OOF Score: \033[1m{roc_auc_score(y, oof_preds):.5f}\033[0m")
 print("="*26, "\n")
 # ----- cell
 oof_df = pd.DataFrame({ID: train_id, TARGET: oof_preds})
-np.save(f'oof_pub_realmlp_s{SEED0}.npy', oof_preds)
+np.save(f'oof_{OUT}.npy', oof_preds)
 
 sub = pd.DataFrame({ID: test_id, TARGET: test_preds})
-np.save(f'pred_pub_realmlp_s{SEED0}.npy', test_preds)
+np.save(f'pred_{OUT}.npy', test_preds)
 sub.head()
 # ----- cell

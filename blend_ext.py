@@ -30,7 +30,13 @@ OWN = {"our_xgb3": f"{X}_gpu,{X}_s7_gpu,{X}_s11_gpu", "our_cat2": f"{C},{C}_s7",
 RM = sorted(glob.glob("oof_pub_realmlp_s*.npy"))  # RealMLP tohumları (public/pub_realmlp.py)
 if RM:
     OWN["our_realmlp"] = ",".join(f[4:-4] for f in RM)
-for k, t in {"our_cat_d8": f"{C}_d8_gpu", "our_cat_d5": f"{C}_d5"}.items():
+RM10 = sorted(glob.glob("oof_pub_realmlp_f10_s*.npy"))  # 10 katlı RealMLP tohumları
+if RM10:
+    OWN["our_realmlp_f10"] = ",".join(f[4:-4] for f in RM10)
+XF10 = [t for t in (f"{X}_f10_gpu", f"{X}_s7_f10_gpu", f"{X}_s11_f10_gpu") if os.path.exists(f"oof_{t}.npy")]
+if XF10:
+    OWN["our_xgb_f10"] = ",".join(XF10)
+for k, t in {"our_cat_d8": f"{C}_d8_gpu", "our_cat_d5": f"{C}_d5", "our_cat_d5_f10": f"{C}_d5_f10"}.items():
     if os.path.exists(f"oof_{t}.npy"):
         OWN[k] = t
 for k, tags in OWN.items():
