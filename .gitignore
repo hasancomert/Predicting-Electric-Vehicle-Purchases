@@ -5,5 +5,5 @@ catboost_info/
 __pycache__/
 .ipynb_checkpoints/
 kaggle.json
-kernel_build/
+kernel_build*/
 ext/
