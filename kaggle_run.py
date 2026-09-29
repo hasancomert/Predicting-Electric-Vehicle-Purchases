@@ -3,7 +3,7 @@ dosyalarını buraya indirir. xgb ve cat GPU'da, lgbm CPU'da eğitilir (GPU etik
 Kullanım: python kaggle_run.py "xgb base,freq,dig,te1 0.02" "cat base,freq,dig,te1 0.05"
           python kaggle_run.py "xgb base,freq,dig,te1 0.1 trials=40"   # Optuna araması
           python kaggle_run.py --fetch   # son sürümü bekle, günlüğü göster, çıktıyı indir
-PVEP_SLUG=<ad> başka bir not defteri (ve kernel_build_<ad> klasörü) kullanır."""
+PVEP_SLUG=<ad> başka bir not defteri (ve kernel_build_<ad> klasörü) kullanır, PVEP_CPU=1 GPU'suz."""
 import json
 import os
 import shutil
@@ -14,9 +14,11 @@ from kaggle import api
 
 SLUG = os.environ.get("PVEP_SLUG", "pvep-train")  # aynı anda ikinci iş için başka not defteri
 BUILD = "kernel_build" if SLUG == "pvep-train" else f"kernel_build_{SLUG}"
+CPU = os.environ.get("PVEP_CPU") == "1"  # GPU yuvası harcamayan CPU not defteri (lgbm için)
 REF = f"{api.get_config_value('username')}/{SLUG}"
 GROUPS = {"base", "freq", "freq2", "dig", "dig2", "recipe", "omean", "flag", "te1", "te3", "bins",
-          "bins2", "tedig", "te2", "te2s", "ted", "ncat", "orig", "mb"}
+          "bins2", "tedig", "te2", "te2s", "ted", "ncat", "orig", "mb", "tok", "tokx", "mix"}
+TOKSRC = "hasancmert/pvep-gpt2tok"  # gpt2_income_tokens.csv'yi üreten not defteri (girdi olarak bağlanır)
 
 # Not defterinde çalışan kod; başına JOBS ve TRAIN (train.py'nin metni) eklenir.
 BODY = """import glob, os, shutil, subprocess, sys
@@ -32,6 +34,8 @@ os.chdir("/tmp/pvep")  # çıktıya yalnızca .npy dosyaları gitsin
 for src, dst in [("train.csv", "train.csv"), ("test.csv", "test.csv"),
                  ("EV_Adoption_and_Range_Anxiety_Dataset.csv", "original.csv")]:
     os.symlink(find(src), dst)
+for f in glob.glob("/kaggle/input/**/gpt2_income_tokens.csv", recursive=True)[:1]:
+    os.symlink(f, "gpt2_income_tokens.csv")
 with open("train.py", "w") as f:
     f.write(TRAIN)
 env = dict(os.environ, PVEP_GPU="1" if shutil.which("nvidia-smi") else "0")
@@ -56,10 +60,13 @@ def push(jobs):
     with open(f"{BUILD}/run.py", "w", encoding="utf-8") as f:
         f.write(f"JOBS = {jobs!r}\nTRAIN = {train!r}\n" + BODY)
     meta = dict(id=REF, title=SLUG, code_file="run.py", language="python", kernel_type="script",
-                is_private=True, enable_gpu=True, enable_tpu=False, enable_internet=False,
-                machine_shape="NvidiaTeslaT4", competition_sources=["playground-series-s6e9"],
+                is_private=True, enable_gpu=not CPU, enable_tpu=False, enable_internet=False,
+                **({} if CPU else {"machine_shape": "NvidiaTeslaT4"}),
+                competition_sources=["playground-series-s6e9"],
                 dataset_sources=["itzzomkar/ev-adoption-behavior-and-range-anxiety"],
-                kernel_sources=[], model_sources=[])
+                kernel_sources=[TOKSRC] if any(g in job.split()[1].split(",") for job in jobs
+                                               for g in ("tok", "tokx", "mix")) else [],
+                model_sources=[])
     with open(f"{BUILD}/kernel-metadata.json", "w") as f:
         json.dump(meta, f, indent=2)
     r = api.kernels_push(BUILD)

@@ -4,7 +4,8 @@ Değişen yalnızca: not defteri komutları (%%time) kaldırıldı, veri yollar�
 PVEP_SEED ortam değişkeninden (varsayılan 42; katlar, başlangıç ve hedef kodlama bu tohumla), kat sayısı
 PVEP_FOLDS'tan (varsayılan 5), PVEP_PLUS=1 ile gelir haneleri ve ham sütunların hedef kodlaması eklenir
 (pvep eki), PVEP_FULL=1 ile CV'siz tüm train (yalnız pred_pub_realmlp[_plus]_full_s<tohum>.npy);
-PVEP_HOLD=h ile tam veri benzetimi (pvep eki): train'in 10 katlı bölmesinin (tohum 42, train.py hold= ile
+PVEP_TOK=1 ile gelirin GPT-2 BPE parçaları (ilk, ilk iki, son; kategori ve hedef kodlama, pvep eki;
+gpt2_income_tokens.csv gerekir); PVEP_HOLD=h ile tam veri benzetimi (pvep eki): train'in 10 katlı bölmesinin (tohum 42, train.py hold= ile
 aynı) h. katı etiketli sahte test olur, kalan %90 ile CV ya da PVEP_FULL; çıktı adına _h<h> eklenir;
 çıktı oof_/pred_pub_realmlp[_plus][_f<kat>]_s<tohum>.npy. 5 katta tohum 42'nin
 katları train.py ile aynı. GPU."""
@@ -12,9 +13,10 @@ import glob, os
 SEED0 = int(os.environ.get("PVEP_SEED", "42"))
 FOLDS0 = int(os.environ.get("PVEP_FOLDS", "5"))
 PLUS = os.environ.get("PVEP_PLUS") == "1"  # pvep eki: gelir haneleri + ham sütunların hedef kodlaması
+TOKF = os.environ.get("PVEP_TOK") == "1"  # pvep eki: gelirin GPT-2 BPE parçaları (kategori + hedef kodlama)
 FULL0 = os.environ.get("PVEP_FULL") == "1"  # pvep eki: CV yok, tüm train ile tek model, yalnız test tahmini
 HOLD0 = int(os.environ.get("PVEP_HOLD", "-1"))  # pvep eki: sahte test = train'in 10 katlı bölmesinin h. katı
-OUT = (f"pub_realmlp{'_plus' if PLUS else ''}"
+OUT = (f"pub_realmlp{'_plus' if PLUS else ''}{'_tok' if TOKF else ''}"
        f"{'_full' if FULL0 else ('' if FOLDS0 == 5 else f'_f{FOLDS0}')}"
        f"{f'_h{HOLD0}' if HOLD0 >= 0 else ''}_s{SEED0}")
 
@@ -77,6 +79,12 @@ print("init len(cat_cols):", len(cat_cols))
 print("init len(num_cols):", len(num_cols), "\n")
 
 category_map = {}
+if TOKF:  # pvep eki
+    TOKMAP = pd.read_csv(find('gpt2_income_tokens.csv'))
+    TOKMAP = TOKMAP.set_index(TOKMAP.value.astype('int64'))
+    for nm, v in {'L1': TOKMAP.t1, 'L2': TOKMAP.t1 * 60000 + TOKMAP.t2,
+                  'LAST': TOKMAP.ntok * 60000 + TOKMAP['last']}.items():
+        TOKMAP[nm] = pd.factorize(v)[0] + 1
 important_combos = [
     ('Annual_Income_USD', 'Range_Anxiety_Level'),
     ('Age', 'Range_Anxiety_Level'),
@@ -126,6 +134,10 @@ def feature_engineering(df, fit=False):
         decimal_name = f"_{col}_decimal"
         df[decimal_name] = (df[col] % 1).round(2).astype('float32')
     df['Annual_Income_USD_is_multiple_10_'] = (np.floor(df['Annual_Income_USD']) % 10 == 0).astype('category')
+    if TOKF:  # pvep eki: GPT-2 BPE parçaları (veri üreticisi GPT-2 tabanlı olabilir; P. B. Elefante'nin fikri)
+        iv = df['Annual_Income_USD'].astype('int64')
+        for nm in ('L1', 'L2', 'LAST'):  # sıkıştırılmış kodlar (gömme tablosu boyutu = en büyük kod + 1)
+            df[f'tok_{nm}_'] = iv.map(TOKMAP[nm]).fillna(0).astype('int64').astype('category')
     if PLUS:  # pvep eki: gelirin haneleri, kategori olarak
         for k in range(4):
             df[f'Income_digit{k}_'] = (np.floor(df['Annual_Income_USD']) // 10 ** k % 10).astype('int32').astype('category')
@@ -197,6 +209,7 @@ X, new_cat_cols, new_num_cols, combo_names = feature_engineering(X, fit=True)
 X_test, _, _, _ = feature_engineering(X_test, fit=False)
 cat_cols += new_cat_cols; num_cols += new_num_cols
 RAW_COLS = [c for c in X.columns if not c.endswith('_') and not c.startswith('_')]  # pvep eki: 13 ham sütun
+TOK_COLS = ['tok_L1_', 'tok_L2_', 'tok_LAST_']  # pvep eki
 print("len(new_cat_cols):", len(new_cat_cols))
 print("len(new_num_cols):", len(new_num_cols), "\n")
 
@@ -894,7 +907,7 @@ TE = True
 if FULL0:  # pvep eki: tüm train; doğrulama kümesi train'in bir parçası, yalnız epoch seçimi için
     X_tr, y_tr, X_tst = X.copy(), y, X_test.copy()
     X_val, y_val = X.iloc[:20000].copy(), y.iloc[:20000]
-    te_cols = combo_names + (RAW_COLS if PLUS else [])
+    te_cols = combo_names + (RAW_COLS if PLUS else []) + (TOK_COLS if TOKF else [])
     enc = TargetEncoder(cv=FOLDS, smooth='auto', shuffle=True, random_state=SEED)
     te_names = [f"_{col}TE" for col in te_cols]
     X_tr[te_names] = enc.fit_transform(X_tr[te_cols], y_tr)
@@ -917,7 +930,7 @@ for fold, (tr_idx, val_idx) in enumerate(skf.split(X, y), 1):
     X_tst = X_test.copy()    
 
     if TE:
-        te_cols = combo_names + (RAW_COLS if PLUS else [])
+        te_cols = combo_names + (RAW_COLS if PLUS else []) + (TOK_COLS if TOKF else [])
         TE = TargetEncoder(cv=FOLDS, smooth='auto', shuffle=True, random_state=SEED)
         tr_enc = TE.fit_transform(X_tr[te_cols], y_tr)
         val_enc = TE.transform(X_val[te_cols])

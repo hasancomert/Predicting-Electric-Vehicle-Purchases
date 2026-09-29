@@ -12,7 +12,8 @@ sahte test olur, kalan %90 ile CV (folds=9 önerilir) ve full=f; sahte testte ka
 ağacı tek sütunla sınırlar (interaction_constraints), pl=w her katta ikinci bir model eğitir: test
 satırları birinci aşamanın olasılıklarıyla yumuşak etiketli (ağırlık w) eğitime eklenir.
 Gruplar (virgülle): base, freq, freq2, dig, dig2, recipe, omean, flag, te1, te3, bins, bins2, tedig, te2,
-te2s, ted, ncat, orig, mb (lgbm/xgb max_bin=1024) (README'de sonuçlar)
+te2s, ted, ncat, orig, mb (lgbm/xgb max_bin=1024), tok, tokx, mix (gpt2_income_tokens.csv gerekir) (README'de
+sonuçlar)
 PVEP_GPU=1 ile xgb ve cat GPU'da eğitilir, etikete _gpu eklenir (kaggle_run.py bunu ayarlar)."""
 import os
 import sys
@@ -130,6 +131,47 @@ if "bins2" in groups:  # ek ölçekler
     bins.update(inc_10=inc // 10, inc_500=inc // 500, inc_5000=inc // 5000, com_5=com // 5)
 if "tedig" in groups:  # hanelerin hedef kodlaması
     bins.update(DIG)
+TOK = {}  # gelirin GPT-2 BPE parçaları (veri üreticisi GPT-2 tabanlı olabilir; P. B. Elefante'nin fikri)
+if groups & {"tok", "tokx"} or "mix" in groups and os.path.exists("gpt2_income_tokens.csv"):
+    tk = pd.read_csv("gpt2_income_tokens.csv")  # scratchpad/k_gpt2tok ile Kaggle'da üretildi
+    tk = tk.set_index(tk.value.astype(np.int64))
+    iv = inc.fillna(-1).astype(np.int64)
+    TOK = {k: pd.factorize(iv.map(v))[0].astype(np.int64) + 1
+           for k, v in {"L1": tk.t1, "L2": tk.t1 * 60000 + tk.t2, "LAST": tk.ntok * 60000 + tk["last"]}.items()}
+if "tok" in groups:  # ilk parça, ilk iki parça, son parça: hedef kodlama anahtarı ve (etiketsiz) sayım
+    bins.update({f"tok_{k}": v for k, v in TOK.items()})
+    for k, v in TOK.items():
+        F[f"tok_{k}_cnt"] = np.log1p(np.bincount(v)[v])
+    F["tok_n"] = iv.map(tk.ntok).fillna(0)
+if "tokx" in groups:  # parça x bağlam hücreleri
+    for t in ("L1", "L2"):
+        for c in ["City_Type", "Home_Charging_Possible", "Subsidy_Available", "Environmental_Concern_Level",
+                  "Range_Anxiety_Level"]:
+            bins[f"tok_{t}|{c}"] = TOK[t] * (codes[c].max() + 1) + codes[c]
+if "mix" in groups:  # aynı anahtarı paylaşan train+test satırlarının diğer sütun ortalamaları (kendisi hariç)
+    gen = np.ones(len(allx))
+    gen[n + m:n + m + len(orig)] = 0  # orijinal veri sayılmaz
+    MV = {"env": allx.Environmental_Concern_Level, "sub": allx.Subsidy_Available == "Yes",
+          "anx": allx.Range_Anxiety_Level.map({"Low": 0, "Medium": 1, "High": 2}),
+          "home": allx.Home_Charging_Possible == "Yes", "urban": allx.City_Type == "Urban",
+          "rural": allx.City_Type == "Rural", "suv": allx.Current_Car_Type == "SUV",
+          "truck": allx.Current_Car_Type == "Truck", "sedan": allx.Current_Car_Type == "Sedan",
+          "male": allx.Gender == "Male", "cars": allx.Number_of_Cars_Owned, "age": allx.Age,
+          "sth": allx.Charging_Stations_Near_Home, "stw": allx.Charging_Stations_Near_Work, "cmt": com,
+          "inc": inc / 1e4}
+    mk = {"IV": codes["Annual_Income_USD"], "CV": codes["Daily_Commute_km"],
+          "IVCV": pd.factorize(codes["Annual_Income_USD"] * (codes["Daily_Commute_km"].max() + 1)
+                               + codes["Daily_Commute_km"])[0]}
+    mk.update({k: TOK[k] for k in ("L1", "L2") if k in TOK})
+    for kn, key in mk.items():
+        cnt = np.bincount(key, weights=gen)[key]
+        F[f"mix_{kn}_logn"] = np.log(np.maximum(cnt, 1))
+        for vn, v in MV.items():
+            if vn == "inc" and kn in ("IV", "L1", "L2", "IVCV") or vn == "cmt" and kn in ("CV", "IVCV"):
+                continue
+            v = v.to_numpy(float)
+            gm = v[gen == 1].mean()
+            F[f"mix_{kn}_{vn}"] = (np.bincount(key, weights=v * gen)[key] - v * gen + 5 * gm) / (cnt - gen + 5) - gm
 for k, v in bins.items():
     keys[k] = pd.factorize(v)[0].astype(np.int64) + 1
 if "ted" in groups:  # hane izlerinin hedef kodlaması
