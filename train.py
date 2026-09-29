@@ -5,7 +5,8 @@ emb, epochs, bs, wd, lowcat (en çok bu kadar farklı değerli sayısallara da g
 Ayarlar (virgülle, ör. max_depth=7,subsample=0.9) modelin varsayılanlarını ezer ve etikete eklenir;
 seed=N model ve hedef kodlama tohumu (katlar sabit), folds=N kat sayısı (varsayılan 5), name=ad etikette
 ayarların yerine geçer, trials=N Optuna ile N deneme arar (dosya yazmaz, en iyi ayarları basar; şimdilik xgb),
-solo=1 lgbm/xgb'de her ağacı tek sütunla sınırlar (interaction_constraints).
+solo=1 lgbm/xgb'de her ağacı tek sütunla sınırlar (interaction_constraints), pl=w her katta ikinci bir model
+eğitir: test satırları birinci aşamanın olasılıklarıyla yumuşak etiketli (ağırlık w) eğitime eklenir.
 Gruplar (virgülle): base, freq, freq2, dig, dig2, recipe, omean, flag, te1, te3, bins, bins2, tedig, te2,
 te2s, ted, ncat, orig, mb (lgbm/xgb max_bin=1024) (README'de sonuçlar)
 PVEP_GPU=1 ile xgb ve cat GPU'da eğitilir, etikete _gpu eklenir (kaggle_run.py bunu ayarlar)."""
@@ -48,6 +49,7 @@ OVR = dict(kv.split("=") for kv in sys.argv[4].split(",")) if len(sys.argv) > 4 
 OVR = {k: num(v) for k, v in OVR.items()}
 TRIALS, NAME, MSEED = OVR.pop("trials", 0), OVR.pop("name", None), OVR.pop("seed", SEED)
 FOLDS = OVR.pop("folds", FOLDS)  # 10 katta tohum 42 megayak OOF kütüphanesiyle aynı bölme
+PL = OVR.pop("pl", 0)  # pl=w: ikinci aşama, test satırlarını birinci aşamanın olasılıklarıyla (ağırlık w) görür
 GPU = os.environ.get("PVEP_GPU") == "1" and model_name != "lgbm"  # pip LightGBM'i CUDA'sız
 
 train, test, orig = (pd.read_csv(f) for f in ("train.csv", "test.csv", "original.csv"))
@@ -158,18 +160,18 @@ def solo(p, cols, names=False):  # solo=1: her ağaç tek sütun (toplamsal mode
     return {"interaction_constraints": groups} if p.pop("solo", 0) else {}
 
 
-def lgbm(Xtr, ytr, Xva, yva, Xte, **p):
+def lgbm(Xtr, ytr, Xva, yva, Xte, w=None, **p):
     p = p | solo(p, Xtr.columns)
     mdl = lgb.LGBMClassifier(**dict(n_estimators=20000, learning_rate=LR, num_leaves=63,
                                     min_child_samples=100, subsample=0.8, subsample_freq=1,
                                     colsample_bytree=0.5, reg_lambda=1.0, random_state=MSEED,
                                     verbose=-1, **MB) | p)
-    mdl.fit(Xtr, ytr, eval_set=[(Xva, yva)], eval_metric="auc",
+    mdl.fit(Xtr, ytr, sample_weight=w, eval_set=[(Xva, yva)], eval_metric="auc",
             callbacks=[lgb.early_stopping(int(20 / LR), verbose=False)])
     return mdl.predict_proba(Xva)[:, 1], mdl.predict_proba(Xte)[:, 1], mdl.best_iteration_
 
 
-def xgbm(Xtr, ytr, Xva, yva, Xte, **p):
+def xgbm(Xtr, ytr, Xva, yva, Xte, w=None, **p):
     p = p | solo(p, Xtr.columns, names=True)
     mdl = xgb.XGBClassifier(**dict(n_estimators=20000, learning_rate=LR, max_depth=6,
                                    min_child_weight=5, subsample=0.8, colsample_bytree=0.5,
@@ -178,18 +180,18 @@ def xgbm(Xtr, ytr, Xva, yva, Xte, **p):
                                    max_cat_to_onehot=4, eval_metric="auc",
                                    early_stopping_rounds=int(20 / LR), random_state=MSEED,
                                    n_jobs=4, **MB) | p)
-    mdl.fit(Xtr, ytr, eval_set=[(Xva, yva)], verbose=False)
+    mdl.fit(Xtr, ytr, sample_weight=w, eval_set=[(Xva, yva)], verbose=False)
     return mdl.predict_proba(Xva)[:, 1], mdl.predict_proba(Xte)[:, 1], mdl.best_iteration
 
 
-def cat(Xtr, ytr, Xva, yva, Xte, **p):
+def cat(Xtr, ytr, Xva, yva, Xte, w=None, **p):
     s = lambda d: d.astype({c: str for c in CATS})
     mdl = CatBoostClassifier(**dict(iterations=20000, learning_rate=LR, depth=6, eval_metric="AUC",
                                     od_type="Iter", od_wait=int(20 / LR), cat_features=CATS,
                                     task_type="GPU" if GPU else "CPU",
                                     border_count=254,  # GPU varsayılanı 128
                                     random_seed=MSEED, verbose=0, allow_writing_files=False) | p)
-    mdl.fit(s(Xtr), ytr, eval_set=(s(Xva), yva))
+    mdl.fit(s(Xtr), ytr, sample_weight=w, eval_set=(s(Xva), yva))
     return (mdl.predict_proba(s(Xva))[:, 1], mdl.predict_proba(s(Xte))[:, 1],
             mdl.get_best_iteration())
 
@@ -296,15 +298,25 @@ if TRIALS:  # kat verisi bir kez hazırlanır; her deneme 5 katlı CV AUC dönd�
         for k, v in study.best_params.items()), flush=True)
     sys.exit()
 
-oof, pred = np.zeros(n), np.zeros(m)
+oof, pred, oof1 = np.zeros(n), np.zeros(m), np.zeros(n)
 for i, (tr, va) in enumerate(folds):
     Xtr, ytr, Xva, Xte = fold_data(tr, va)
     oof[va], p, it = MODELS[model_name](Xtr, ytr, Xva, y[va], Xte, **OVR)
+    if PL:  # sözde etiket: bu katın etiketlerini görmemiş birinci aşamanın test olasılıkları, sızıntısız
+        oof1[va] = oof[va]
+        Xpl = pd.concat([Xtr, Xte, Xte], ignore_index=True)
+        ypl = np.r_[ytr, np.ones(m), np.zeros(m)].astype(int)
+        wpl = np.r_[np.ones(len(ytr)), PL * p, PL * (1 - p)]
+        oof[va], p, it = MODELS[model_name](Xpl, ypl, Xva, y[va], Xte, w=wpl, **OVR)
+        print(f"  1. aşama {roc_auc_score(y[va], oof1[va]):.5f} ->", end="")
     pred += p / FOLDS
     print(f"  fold {i}: {roc_auc_score(y[va], oof[va]):.5f} ({it} it)", flush=True)
+if PL:
+    print(f"1. aşama (sözde etiketsiz) CV AUC: {roc_auc_score(y, oof1):.5f}", flush=True)
 tag = (f"{model_name}_{'+'.join(sorted(groups))}_{LR}"
        + (f"_{NAME}" if NAME else "".join(f"_{k}={v}" for k, v in sorted(OVR.items())))
        + (f"_s{MSEED}" if MSEED != SEED else "") + (f"_f{FOLDS}" if FOLDS != 5 else "")
+       + (f"_pl{PL}" if PL else "")
        + ("_gpu" if GPU else ""))
 print(f"{tag} CV AUC: {roc_auc_score(y, oof):.5f}  "
       f"[{time.time() - t0:.0f} sn, {Xtr.shape[1]} özellik]", flush=True)
