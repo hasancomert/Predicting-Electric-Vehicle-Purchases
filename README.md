@@ -65,6 +65,14 @@ ile ~0.0008 düşük) ve 254 sınırla hızlı da değil (543 sn), bu yüzden Ca
 - `mb`: lgbm/xgb için `max_bin=1024` (özellik değil, model ayarı)
 - `tedig`: hanelerin hedef kodlaması; `freq2`: tüm sütunların ve hanelerin normalize frekansı;
   `flag`: gelir eşik bölgeleri (30k, >=170537, 38-42k) ve çevre ilgisi 1
+- `tok`: gelirin GPT-2 BPE parçaları (`" " + gelir` GPT-2 ile parçalanır: ilk parça, ilk iki parça, son
+  parça; hedef kodlama anahtarı + etiketsiz sayım + parça sayısı). Veri üreticisi GPT-2 tabanlı olabilir
+  (GReaT türü; sayıları parça parça yazar), bu yüzden alım oranı onluk hanelerle değil parça sınırlarıyla
+  değişiyor. Fikir: P. B. Elefante, "KPS6E09 Generator-Aware Ridge Logistic Regression" (tabloda 2.).
+  Eşleme `gpt2_income_tokens.csv` (Kaggle'da `pvep-gpt2tok` not defteri üretir, `kaggle_run.py` onu girdi
+  olarak bağlar). `tokx`: parça x bağlam hücreleri; `mix`: aynı gelir/mesafe/parçayı paylaşan train+test
+  satırlarının diğer sütun ortalamaları (kendisi hariç); `chain`: gelirde ilk parça -> ilk iki parça -> tam
+  değer, mesafede tam km -> değer hiyerarşik hedef oranı (katlar içinde çapraz)
 
 Deneyler (LightGBM, öğrenme oranı 0.1, 5 kat CV AUC):
 
@@ -149,6 +157,19 @@ her modelde ~+0.0001: RealMLP 6 tohum 0.94611-0.94614 (ortalaması 0.94624; 5 ka
 7. gönderim: RealMLP 10 kat 0.333, XGBoost 10 kat, CatBoost d5 10 kat, megayak B, D (her biri 0.167); CV 0.94644,
 iç içe 0.94643.
 
+### GPT-2 parçaları (`tok`): bulunan desen
+LightGBM lr 0.1, 5 kat, taban,bins,dig2,te3 üstüne (Kaggle CPU): temel 0.94573, **+tok 0.94608**, +chain
+0.94605, +tok,chain 0.94605, +tok,mix 0.94597, +mix 0.94591, +tok,tokx 0.94591. 10 katta (lr 0.02):
+XGBoost `t1` tohum 42/7/11 0.94625/0.94623/0.94625 -> **0.94648/0.94645/0.94647** (ortalaması 0.94652),
+RealMLP (`PVEP_TOK=1`) 0.9461 -> **0.94636**. CatBoost d5 ilk katta 0.94528 -> 0.94550.
+
+### Tam veri eğitimi benzetimi (sonuç: kazanç yok)
+`train.py ... hold=h,folds=9,full=1.1`: train'in %10'u etiketli sahte test, kalan %90 ile 9 katlı CV ve tam
+veri modeli. XGBoost `t1` lr 0.02, 4 sahte test: tam veri modeli tek başına kat ortalamasından ortalama
+0.00004 kötü (üçünde -0.00005/-0.00007, birinde +0.00003; ağaç sayısı x0.9-1.3 fark etmiyor), sıra
+uzayında %25 karışım +0.00001. Tek model, 9 modelin ortalamasının varyans avantajını %11 fazla veriyle
+kapatamıyor; `FULLMIX` kullanılmadı.
+
 ### Yeni desen arayışı (sonuç: bulunamadı)
 7. harmanın OOF'u izotonik kalibre edilip artıkları (y - p) gruplara göre incelendi; bir grupta artık
 ortalaması şanstan büyükse orada kaçırılan bir desen vardır.
@@ -205,6 +226,7 @@ Dosya adı `pevpsubmissionN.csv`.
 | 8 | 7. + RealMLP `PVEP_PLUS` 2 tohum (desen arayışının artığı) | 0.94645 (iç içe 0.94644) | 0.94644 |
 | 9 | 8. + üç açık OOF (residual-stack v19 ve jazivxt, BlamerX) | 0.94647 (iç içe 0.94645) | 0.94645 |
 | 10 | yalnız kendi modellerimiz: RealMLP 10 kat 0.5 + XGBoost `t1` 10 kat 0.5, ölü bölge kuralı | 0.94642 (iç içe 0.94642) | 0.94644 |
+| 11 | GPT-2 parçaları (`tok`): XGBoost `t1`+tok 10 kat 3 tohum 0.5, RealMLP+tok 0.125, RealMLP 10 kat 0.125, residual-stack v19 0.125, BlamerX 0.125, ölü bölge | 0.94661 (iç içe 0.94660) | |
 
 1. gönderimin tek modelleri: LightGBM 0.94190 (~3 dk), CatBoost 0.94178 (~22 dk, 4 çekirdek CPU).
 2. gönderimin tek modelleri (base,freq,dig,te1): LightGBM lr 0.02 0.94562 (5.5 dk),

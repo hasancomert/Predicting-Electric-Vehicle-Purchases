@@ -12,7 +12,7 @@ sahte test olur, kalan %90 ile CV (folds=9 önerilir) ve full=f; sahte testte ka
 ağacı tek sütunla sınırlar (interaction_constraints), pl=w her katta ikinci bir model eğitir: test
 satırları birinci aşamanın olasılıklarıyla yumuşak etiketli (ağırlık w) eğitime eklenir.
 Gruplar (virgülle): base, freq, freq2, dig, dig2, recipe, omean, flag, te1, te3, bins, bins2, tedig, te2,
-te2s, ted, ncat, orig, mb (lgbm/xgb max_bin=1024), tok, tokx, mix (gpt2_income_tokens.csv gerekir) (README'de
+te2s, ted, ncat, orig, mb (lgbm/xgb max_bin=1024), tok, tokx, mix, chain (gpt2_income_tokens.csv gerekir) (README'de
 sonuçlar)
 PVEP_GPU=1 ile xgb ve cat GPU'da eğitilir, etikete _gpu eklenir (kaggle_run.py bunu ayarlar)."""
 import os
@@ -132,7 +132,7 @@ if "bins2" in groups:  # ek ölçekler
 if "tedig" in groups:  # hanelerin hedef kodlaması
     bins.update(DIG)
 TOK = {}  # gelirin GPT-2 BPE parçaları (veri üreticisi GPT-2 tabanlı olabilir; P. B. Elefante'nin fikri)
-if groups & {"tok", "tokx"} or "mix" in groups and os.path.exists("gpt2_income_tokens.csv"):
+if groups & {"tok", "tokx", "chain"} or "mix" in groups and os.path.exists("gpt2_income_tokens.csv"):
     tk = pd.read_csv("gpt2_income_tokens.csv")  # scratchpad/k_gpt2tok ile Kaggle'da üretildi
     tk = tk.set_index(tk.value.astype(np.int64))
     iv = inc.fillna(-1).astype(np.int64)
@@ -174,6 +174,12 @@ if "mix" in groups:  # aynı anahtarı paylaşan train+test satırlarının diğ
             F[f"mix_{kn}_{vn}"] = (np.bincount(key, weights=v * gen)[key] - v * gen + 5 * gm) / (cnt - gen + 5) - gm
 for k, v in bins.items():
     keys[k] = pd.factorize(v)[0].astype(np.int64) + 1
+CHAINS = []  # chain: hiyerarşik hedef oranı (gelir: ilk parça -> ilk iki parça -> tam değer; mesafe: tam km -> değer)
+if "chain" in groups:
+    CI = pd.factorize(com // 1)[0].astype(np.int64) + 1
+    CHAINS = ([([TOK["L1"], TOK["L2"], codes["Annual_Income_USD"]], S) for S in (5, 20, 80)]
+              + [([CI, codes["Daily_Commute_km"]], S) for S in (5, 20)])
+    CHAIN_NAMES = [f"chain{j}_S{S}_{i}" for j, (ks, S) in enumerate(CHAINS) for i in range(len(ks))]
 if "ted" in groups:  # hane izlerinin hedef kodlaması
     inc = allx.Annual_Income_USD.fillna(-1).astype(np.int64)
     keys.update(inc_mod100=inc % 100, inc_mod1000=inc % 1000,
@@ -189,6 +195,19 @@ MB = {"max_bin": 1024} if "mb" in groups else {}
 X, X_test, X_orig = F.iloc[:n], F.iloc[n:n + m], F.iloc[n + m:n + m + len(orig)]
 folds = list(StratifiedKFold(FOLDS, shuffle=True, random_state=SEED).split(X, y))
 use_orig = "orig" in groups
+
+
+def chain_feats(fit, app):  # fit: etiketi kullanılan train satırları, app: kodlanan satırlar (allx dizinleri)
+    out, prior = [], y[fit].mean()
+    for ks, S in CHAINS:
+        post = np.full(len(app), prior)
+        for key in ks:
+            sz = int(key.max()) + 1
+            s_, c_ = np.bincount(key[fit], weights=y[fit], minlength=sz), np.bincount(key[fit], minlength=sz)
+            post = (s_[key[app]] + S * post) / (c_[key[app]] + S)
+            p = np.clip(post, 1e-6, 1 - 1e-6)
+            out.append(np.log(p / (1 - p)))
+    return np.column_stack(out)
 
 
 def fold_data(tr, va):
@@ -208,6 +227,15 @@ def fold_data(tr, va):
         if va is not None:
             Xva = add(Xva, enc.transform(K[va]), names)
         Xte = add(Xte, enc.transform(K[n:n + m]), names)
+    if CHAINS:  # train satırları iç 5 katla çapraz, doğrulama ve test tüm eğitim satırlarıyla
+        assert not use_orig
+        ctr = np.zeros((len(tr), len(CHAIN_NAMES)))
+        for a, b in StratifiedKFold(5, shuffle=True, random_state=MSEED).split(tr, y[tr]):
+            ctr[b] = chain_feats(tr[a], tr[b])
+        Xtr = add(Xtr, ctr, CHAIN_NAMES)
+        if va is not None:
+            Xva = add(Xva, chain_feats(tr, va), CHAIN_NAMES)
+        Xte = add(Xte, chain_feats(tr, np.arange(n, n + m)), CHAIN_NAMES)
     return Xtr, ytr, Xva, Xte
 
 

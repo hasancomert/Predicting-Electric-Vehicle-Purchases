@@ -17,7 +17,7 @@ BUILD = "kernel_build" if SLUG == "pvep-train" else f"kernel_build_{SLUG}"
 CPU = os.environ.get("PVEP_CPU") == "1"  # GPU yuvası harcamayan CPU not defteri (lgbm için)
 REF = f"{api.get_config_value('username')}/{SLUG}"
 GROUPS = {"base", "freq", "freq2", "dig", "dig2", "recipe", "omean", "flag", "te1", "te3", "bins",
-          "bins2", "tedig", "te2", "te2s", "ted", "ncat", "orig", "mb", "tok", "tokx", "mix"}
+          "bins2", "tedig", "te2", "te2s", "ted", "ncat", "orig", "mb", "tok", "tokx", "mix", "chain"}
 TOKSRC = "hasancmert/pvep-gpt2tok"  # gpt2_income_tokens.csv'yi üreten not defteri (girdi olarak bağlanır)
 
 # Not defterinde çalışan kod; başına JOBS ve TRAIN (train.py'nin metni) eklenir.
@@ -65,7 +65,7 @@ def push(jobs):
                 competition_sources=["playground-series-s6e9"],
                 dataset_sources=["itzzomkar/ev-adoption-behavior-and-range-anxiety"],
                 kernel_sources=[TOKSRC] if any(g in job.split()[1].split(",") for job in jobs
-                                               for g in ("tok", "tokx", "mix")) else [],
+                                               for g in ("tok", "tokx", "mix", "chain")) else [],
                 model_sources=[])
     with open(f"{BUILD}/kernel-metadata.json", "w") as f:
         json.dump(meta, f, indent=2)
