@@ -133,10 +133,12 @@ if GS:
     O["pbe_glr"] = rank(np.mean([aligned(rd(g, "OOF"), tr.id, "oof_pred") for g in GS], axis=0))
     P["pbe_glr"] = rank(np.mean([aligned(rd(g, "TEST"), te.id, "test_pred") for g in GS], axis=0))
     print(f"pbe_glr: {len(GS)} kat tohumu")
-if os.path.exists("ext/pbe-glr-f20/GENERATOR_AWARE_LOGREG_SAMPLE_OOF.parquet"):  # 20 katlı GLR
-    fo = pd.read_parquet("ext/pbe-glr-f20/GENERATOR_AWARE_LOGREG_SAMPLE_OOF.parquet")
-    ft = pd.read_parquet("ext/pbe-glr-f20/GENERATOR_AWARE_LOGREG_SAMPLE_TEST.parquet")
-    O["pbe_glr_f20"], P["pbe_glr_f20"] = rank(aligned(fo, tr.id, "oof_pred")), rank(aligned(ft, te.id, "test_pred"))
+GS20 = [g for g in ("ext/pbe-glr-f20/", "ext/pbe-glr-f20-s7/", "ext/pbe-glr-f20-s11/")  # 20 katlı GLR, kat tohumları
+        if os.path.exists(g + "GENERATOR_AWARE_LOGREG_SAMPLE_OOF.parquet")]
+if GS20:
+    O["pbe_glr_f20"] = rank(np.mean([aligned(rd(g, "OOF"), tr.id, "oof_pred") for g in GS20], axis=0))
+    P["pbe_glr_f20"] = rank(np.mean([aligned(rd(g, "TEST"), te.id, "test_pred") for g in GS20], axis=0))
+    print(f"pbe_glr_f20: {len(GS20)} kat tohumu")
 # Aynı özellik matrisiyle lojistik regresyon yerine XGBoost (pvep-pbe-xgb)
 if os.path.exists("ext/pbe-xgb/GENERATOR_AWARE_XGB_OOF.parquet"):
     fo, ft = pd.read_parquet("ext/pbe-xgb/GENERATOR_AWARE_XGB_OOF.parquet"), pd.read_parquet("ext/pbe-xgb/GENERATOR_AWARE_XGB_TEST.parquet")
