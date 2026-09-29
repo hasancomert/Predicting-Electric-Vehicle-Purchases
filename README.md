@@ -231,7 +231,7 @@ Dosya adı `pevpsubmissionN.csv`.
 | 9 | 8. + üç açık OOF (residual-stack v19 ve jazivxt, BlamerX) | 0.94647 (iç içe 0.94645) | 0.94645 |
 | 10 | yalnız kendi modellerimiz: RealMLP 10 kat 0.5 + XGBoost `t1` 10 kat 0.5, ölü bölge kuralı | 0.94642 (iç içe 0.94642) | 0.94644 |
 | 11 | GPT-2 parçaları (`tok`): XGBoost `t1`+tok 10 kat 3 tohum 0.5, RealMLP+tok 0.125, RealMLP 10 kat 0.125, residual-stack v19 0.125, BlamerX 0.125, ölü bölge | 0.94661 (iç içe 0.94660) | **0.94667** |
-| 12 | tok'lu modeller: CatBoost d5+tok, LightGBM tok+chain, XGBoost tok+chain 2 tohum, RealMLP+tok 5 tohum, residual-stack v19 (her biri 0.143), P. B. Elefante GLR (0.94640; 0.286), ölü bölge | 0.94667 (iç içe 0.94666) | |
+| 12 | tok'lu modeller: CatBoost d5+tok, LightGBM tok+chain, XGBoost tok+chain 2 tohum, RealMLP+tok 5 tohum, residual-stack v19 (her biri 0.143), P. B. Elefante GLR (0.94640; 0.286), ölü bölge | 0.94667 (iç içe 0.94666) | **0.94671** |
 
 1. gönderimin tek modelleri: LightGBM 0.94190 (~3 dk), CatBoost 0.94178 (~22 dk, 4 çekirdek CPU).
 2. gönderimin tek modelleri (base,freq,dig,te1): LightGBM lr 0.02 0.94562 (5.5 dk),

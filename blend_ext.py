@@ -51,9 +51,12 @@ for k, tags in {"our_xgb_tok_f10": [f"{XT}_f10_gpu", f"{XT}_s7_f10_gpu", f"{XT}_
                 "our_cat_tok_f10": [f"{CT}_f10", f"{CT}_s7_f10"],
                 "our_lgbm_tok_f10": ["lgbm_base+bins+dig+dig2+freq+te1+te3+tok_0.02_pubp_f10",
                                      "lgbm_base+bins+dig+dig2+freq+te1+te3+tok_0.02_pubp_s7_f10"],
-                "our_lgbm_tokchain_f10": ["lgbm_base+bins+chain+dig+dig2+freq+te1+te3+tok_0.02_pubp_f10"],
+                "our_lgbm_tokchain_f10": ["lgbm_base+bins+chain+dig+dig2+freq+te1+te3+tok_0.02_pubp_f10",
+                                          "lgbm_base+bins+chain+dig+dig2+freq+te1+te3+tok_0.02_pubp_s7_f10"],
                 "our_xgb_tokchain_f10": [f"xgb_base+bins+chain+dig+dig2+freq+te1+te3+tok_0.02_t1{s}_f10_gpu"
-                                         for s in ("", "_s7")],
+                                         for s in ("", "_s7", "_s11")],
+                "our_xgb_t2_tokchain_f10": [f"xgb_base+bins+chain+dig+dig2+freq+te1+te3+tok_0.02_t2{s}_f10_gpu"
+                                            for s in ("", "_s7")],
                 "our_lgbm_tokmix_f10": ["lgbm_base+bins+dig+dig2+freq+mix+te1+te3+tok_0.02_pubp_f10"],
                 "our_realmlp_tok_f10": [f[4:-4] for f in sorted(glob.glob("oof_pub_realmlp_tok_f10_s*.npy"))]}.items():
     tags = [t for t in tags if os.path.exists(f"oof_{t}.npy")]
@@ -116,10 +119,14 @@ for k, fo, ft in [("rs_v19", "s6e9-residual-stack-oof/v19_oof.csv", "s6e9-residu
         fo, ft = pd.read_csv("ext/" + fo), pd.read_csv("ext/" + ft)
         O[k], P[k] = rank(aligned(fo, tr.id, "pred")), rank(aligned(ft, te.id, [c for c in ft if c != "id"][-1]))
 # P. B. Elefante'nin "Generator-Aware Ridge Logistic Regression" not defteri, bizim hesabımızda (pvep-pbe-glr)
-G = "ext/pbe-glr/"
-if os.path.exists(G + "GENERATOR_AWARE_LOGREG_SAMPLE_OOF.parquet"):
-    fo, ft = pd.read_parquet(G + "GENERATOR_AWARE_LOGREG_SAMPLE_OOF.parquet"), pd.read_parquet(G + "GENERATOR_AWARE_LOGREG_SAMPLE_TEST.parquet")
-    O["pbe_glr"], P["pbe_glr"] = rank(aligned(fo, tr.id, "oof_pred")), rank(aligned(ft, te.id, "test_pred"))
+# Kat bölme tohumları 42/7/11 (ext/pbe-glr, ext/pbe-glr-s7, ...) ortalanır: her satırın OOF'u onu görmemiş modellerden.
+GS = [g for g in ("ext/pbe-glr/", "ext/pbe-glr-s7/", "ext/pbe-glr-s11/")
+      if os.path.exists(g + "GENERATOR_AWARE_LOGREG_SAMPLE_OOF.parquet")]
+if GS:
+    rd = lambda g, kind: pd.read_parquet(g + f"GENERATOR_AWARE_LOGREG_SAMPLE_{kind}.parquet")
+    O["pbe_glr"] = rank(np.mean([aligned(rd(g, "OOF"), tr.id, "oof_pred") for g in GS], axis=0))
+    P["pbe_glr"] = rank(np.mean([aligned(rd(g, "TEST"), te.id, "test_pred") for g in GS], axis=0))
+    print(f"pbe_glr: {len(GS)} kat tohumu")
 assert all(np.isfinite(v).all() for v in [*O.values(), *P.values()])
 
 
