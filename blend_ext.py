@@ -127,6 +127,10 @@ if GS:
     O["pbe_glr"] = rank(np.mean([aligned(rd(g, "OOF"), tr.id, "oof_pred") for g in GS], axis=0))
     P["pbe_glr"] = rank(np.mean([aligned(rd(g, "TEST"), te.id, "test_pred") for g in GS], axis=0))
     print(f"pbe_glr: {len(GS)} kat tohumu")
+# Aynı özellik matrisiyle lojistik regresyon yerine XGBoost (pvep-pbe-xgb)
+if os.path.exists("ext/pbe-xgb/GENERATOR_AWARE_XGB_OOF.parquet"):
+    fo, ft = pd.read_parquet("ext/pbe-xgb/GENERATOR_AWARE_XGB_OOF.parquet"), pd.read_parquet("ext/pbe-xgb/GENERATOR_AWARE_XGB_TEST.parquet")
+    O["pbe_xgb"], P["pbe_xgb"] = rank(aligned(fo, tr.id, "oof_pred")), rank(aligned(ft, te.id, "test_pred"))
 assert all(np.isfinite(v).all() for v in [*O.values(), *P.values()])
 
 
