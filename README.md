@@ -166,7 +166,8 @@ RealMLP (`PVEP_TOK=1`) 0.9461 -> **0.94636** (5 tohum 0.94636-0.94638, ortalamas
 yapıyor: XGBoost tok+chain 0.94652/0.94648 (ortalaması 0.94655), LightGBM tok+chain 0.94650; tok+mix 0.94644.
 P. B. Elefante'nin GLR not defteri (üreticiye duyarlı ridge lojistik regresyon, `pvep-pbe-glr`) bizim
 hesabımızda 10 katta 0.94640; ağaçlarla sıra korelasyonu 0.9965, harmanda en büyük ağırlığı alıyor.
-Kat bölme tohumu 7/11 ile 0.94639/0.94638, üçünün ortalaması 0.94643. Aynı özellik matrisiyle XGBoost
+Kat bölme tohumu 7/11 ile 0.94639/0.94638, üçünün ortalaması 0.94643. L2 düzenlileştirmesi düz: 3 / 10 / 30 ->
+0.94639 / 0.94640 / 0.94640. Aynı özellik matrisiyle XGBoost
 (`pvep-pbe-xgb`) 0.94636. XGBoost ayar araması tok'lu setle (40 deneme, lr 0.1): en iyi 0.94629, `t2` ayarları
 (derinlik 4, `max_bin` 1024, daha az L2) 10 katta tok+chain 0.94650/0.94646, `t1` ile aynı düzey.
 
