@@ -204,7 +204,7 @@ Dosya adı `pevpsubmissionN.csv`.
 | 7 | 6. gönderimin yapısı, kendi modellerimiz 10 katla (`folds=10`) | 0.94644 (iç içe 0.94643) | 0.94644 |
 | 8 | 7. + RealMLP `PVEP_PLUS` 2 tohum (desen arayışının artığı) | 0.94645 (iç içe 0.94644) | 0.94644 |
 | 9 | 8. + üç açık OOF (residual-stack v19 ve jazivxt, BlamerX) | 0.94647 (iç içe 0.94645) | 0.94645 |
-| 10 | yalnız kendi modellerimiz: RealMLP 10 kat 0.5 + XGBoost `t1` 10 kat 0.5, ölü bölge kuralı | 0.94642 (iç içe 0.94642) | |
+| 10 | yalnız kendi modellerimiz: RealMLP 10 kat 0.5 + XGBoost `t1` 10 kat 0.5, ölü bölge kuralı | 0.94642 (iç içe 0.94642) | 0.94644 |
 
 1. gönderimin tek modelleri: LightGBM 0.94190 (~3 dk), CatBoost 0.94178 (~22 dk, 4 çekirdek CPU).
 2. gönderimin tek modelleri (base,freq,dig,te1): LightGBM lr 0.02 0.94562 (5.5 dk),
