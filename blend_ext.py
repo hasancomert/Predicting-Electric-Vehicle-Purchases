@@ -1,6 +1,7 @@
 """Kendi modellerimiz + açık OOF kütüphaneleri (ext/) üzerinde sıra uzayında hill climbing.
 Ağırlıklar iç içe CV ile de ölçülür (4 katta seçilir, 5.'de değerlendirilir), aşırı öğrenme görünsün.
 Kullanım: python blend_ext.py pevpsubmission6 [aday,aday,...]   (aday verilmezse hepsi, sinir ağımız hariç)
+DEADZONE=1: gelir 38174-41384 (trende 1257 satır, hiç alım yok; kurallar görülmemiş katta sınandı) en alta itilir.
 ext/ için: kaggle datasets download -d najiama/s6e9-oof -p ext/s6e9-oof --unzip
            kaggle datasets download -d megayak/s6e9-six-feature-views-oof-library \\
                -p ext/s6e9-six-feature-views-oof-library --unzip
@@ -112,6 +113,16 @@ w = hill(names, np.arange(len(y)))
 print("ağırlıklar:", {k: round(float(x), 3) for k, x in zip(names, w) if x})
 print(f"harman CV AUC: {roc_auc_score(y, np.column_stack([O[k] for k in names]) @ w):.5f}  "
       f"(iç içe CV: {roc_auc_score(y, blind):.5f})")
-te["Will_Buy_EV"] = rank(np.column_stack([P[k] for k in names]) @ w)
+pt = np.column_stack([P[k] for k in names]) @ w
+if os.environ.get("DEADZONE") == "1":  # ölü bölge: sıralamayı koruyarak en alta
+    inc_tr = pd.read_csv("train.csv", usecols=["Annual_Income_USD"]).Annual_Income_USD.to_numpy()
+    inc_te = pd.read_csv("test.csv", usecols=["Annual_Income_USD"]).Annual_Income_USD.to_numpy()
+    zt, zv = (inc_tr >= 38174) & (inc_tr <= 41384), (inc_te >= 38174) & (inc_te <= 41384)
+    oo = np.column_stack([O[k] for k in names]) @ w
+    oz = np.where(zt, oo * 1e-3 - 1, oo)
+    print(f"ölü bölge: train {zt.sum()} satır ({int(y[zt].sum())} alım), OOF {roc_auc_score(y, oo):.6f} -> "
+          f"{roc_auc_score(y, oz):.6f}; test {zv.sum()} satır en alta")
+    pt = np.where(zv, pt * 1e-3 - 1, pt)
+te["Will_Buy_EV"] = rank(pt)
 te.to_csv(f"{out}.csv", index=False)
 print(f"{out}.csv yazıldı, {len(te)} satır")

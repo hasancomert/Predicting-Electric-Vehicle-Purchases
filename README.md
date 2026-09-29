@@ -172,6 +172,13 @@ ortalaması şanstan büyükse orada kaçırılan bir desen vardır.
   jazivxt zoom-zoom (+0.000006) katkı yaptı; üçü `blend_ext.py`'de aday. "marcmaldonado/s6e9-generator-
   fingerprints" üreticinin orijinal gelir değerlerini kopyaladığını (%97,9) gösteriyor, ama yazarın ölçümüne
   göre orijinal satırın etiketi tam değer kodlamasının üstüne +0.00003 ekliyor (bizim omean bulgumuzla aynı).
+- Sözde etiketleme (`train.py ... pl=w`, kat başına sızıntısız): ham sütunlarda 0.94164 -> 0.94172, ama
+  XGBoost `t1` 10 katta 0.94625 -> 0.94626 (w=1 ve 0.5); harmana katkısı yok.
+- Saf aralık kuralları (trende %0/%100 alım olan gelir/mesafe aralıklarını en alta/üste itmek): 4 katta bulunup
+  görülmemiş katta uygulanınca >=100 satırlık kurallar -0.00037, >=300 satır -0.00004; yalnızca büyük ölü bölge
+  (gelir 38174-41384, trende 1257 satır, 0 alım) +0.000004 (`DEADZONE=1`). Public LB'de 0.94657 alan açık harman
+  (OOF'suz) bizden en çok bu tür bölgelerde ayrılıyor (ölü bölgede ortalama sıra farkı -0.12); iki dosyanın
+  public LB farkı (0.00012) bu kadar benzer dosyalar için beklenen gürültü düzeyinde (~0.0001), karıştırılmadı.
 
 ### Açık not defterleri (`public/`)
 En iyi açık not defterlerinin uyarlamaları; kendi Kaggle not defterlerinde koşar, `oof_/pred_pub_*.npy`
@@ -197,6 +204,7 @@ Dosya adı `pevpsubmissionN.csv`.
 | 7 | 6. gönderimin yapısı, kendi modellerimiz 10 katla (`folds=10`) | 0.94644 (iç içe 0.94643) | 0.94644 |
 | 8 | 7. + RealMLP `PVEP_PLUS` 2 tohum (desen arayışının artığı) | 0.94645 (iç içe 0.94644) | 0.94644 |
 | 9 | 8. + üç açık OOF (residual-stack v19 ve jazivxt, BlamerX) | 0.94647 (iç içe 0.94645) | 0.94645 |
+| 10 | yalnız kendi modellerimiz: RealMLP 10 kat 0.5 + XGBoost `t1` 10 kat 0.5, ölü bölge kuralı | 0.94642 (iç içe 0.94642) | |
 
 1. gönderimin tek modelleri: LightGBM 0.94190 (~3 dk), CatBoost 0.94178 (~22 dk, 4 çekirdek CPU).
 2. gönderimin tek modelleri (base,freq,dig,te1): LightGBM lr 0.02 0.94562 (5.5 dk),
