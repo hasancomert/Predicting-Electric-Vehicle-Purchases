@@ -162,7 +162,7 @@ Dosya adı `pevpsubmissionN.csv`.
 | 3 | XGBoost 0.5 (+bins,dig2,te3) + CatBoost 0.5 (+bins) | 0.94612 | 0.94625 |
 | 4 | XGBoost `t1` 3 tohum 0.75 + CatBoost (+bins,dig2,te3) 0.25 | 0.94621 | 0.94637 |
 | 5 | XGBoost `t1` 3 tohum, CatBoost 2 tohum, `pub_lgbm`, `pub_xgb` (her biri 0.25) | 0.94626 | 0.94637 |
-| 6 | sıra uzayında, açık OOF kütüphaneleri + RealMLP 6 tohum (`blend_ext.py`, aşağıda) | 0.94642 (iç içe 0.94641) | |
+| 6 | sıra uzayında, açık OOF kütüphaneleri + RealMLP 6 tohum (`blend_ext.py`, aşağıda) | 0.94642 (iç içe 0.94641) | 0.94642 |
 
 1. gönderimin tek modelleri: LightGBM 0.94190 (~3 dk), CatBoost 0.94178 (~22 dk, 4 çekirdek CPU).
 2. gönderimin tek modelleri (base,freq,dig,te1): LightGBM lr 0.02 0.94562 (5.5 dk),
