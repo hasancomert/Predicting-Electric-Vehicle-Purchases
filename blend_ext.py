@@ -147,6 +147,11 @@ for k, dirs in {"pbe_mlp": ("ext/pbe-mlp/", "ext/pbe-mlp-s7/", "ext/pbe-mlp-s11/
         O[k] = rank(np.mean([aligned(rm(g, "OOF"), tr.id, "oof_pred") for g in dirs], axis=0))
         P[k] = rank(np.mean([aligned(rm(g, "TEST"), te.id, "test_pred") for g in dirs], axis=0))
         print(f"{k}: {len(dirs)} kat tohumu")
+# Aynı özellik matrisiyle RealMLP (pvep-pbe-realmlp)
+if os.path.exists("ext/pbe-realmlp/GENERATOR_AWARE_REALMLP_OOF.parquet"):
+    fo = pd.read_parquet("ext/pbe-realmlp/GENERATOR_AWARE_REALMLP_OOF.parquet")
+    ft = pd.read_parquet("ext/pbe-realmlp/GENERATOR_AWARE_REALMLP_TEST.parquet")
+    O["pbe_realmlp"], P["pbe_realmlp"] = rank(aligned(fo, tr.id, "oof_pred")), rank(aligned(ft, te.id, "test_pred"))
 # Aynı özellik matrisiyle lojistik regresyon yerine XGBoost (pvep-pbe-xgb)
 if os.path.exists("ext/pbe-xgb/GENERATOR_AWARE_XGB_OOF.parquet"):
     fo, ft = pd.read_parquet("ext/pbe-xgb/GENERATOR_AWARE_XGB_OOF.parquet"), pd.read_parquet("ext/pbe-xgb/GENERATOR_AWARE_XGB_TEST.parquet")
