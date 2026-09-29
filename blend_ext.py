@@ -179,18 +179,29 @@ names = sys.argv[2].split(",") if len(sys.argv) > 2 else [k for k in O if k != "
 for k in names:
     print(f"{roc_auc_score(y, O[k]):.5f}  {k}")
 blind = np.zeros(len(y))
-for tr_i, va_i in StratifiedKFold(5, shuffle=True, random_state=42).split(y, y):
-    blind[va_i] = np.column_stack([O[k][va_i] for k in names]) @ hill(names, tr_i)
-w = hill(names, np.arange(len(y)))
-print("ağırlıklar:", {k: round(float(x), 3) for k, x in zip(names, w) if x})
-print(f"harman CV AUC: {roc_auc_score(y, np.column_stack([O[k] for k in names]) @ w):.5f}  "
-      f"(iç içe CV: {roc_auc_score(y, blind):.5f})")
-pt = np.column_stack([P[k] for k in names]) @ w
+if os.environ.get("STACK") == "1":  # lojistik regresyonla istifleme: probit(sıra) üzerinde sürekli ağırlıklar
+    from scipy.stats import norm
+    from sklearn.linear_model import LogisticRegression
+    zf = lambda M: norm.ppf(np.clip(M, 1e-6, 1 - 1e-6))
+    ZO, ZP = zf(np.column_stack([O[k] for k in names])), zf(np.column_stack([P[k] for k in names]))
+    C_ = float(os.environ.get("STACK_C", "1"))
+    fitw = lambda idx: LogisticRegression(C=C_, max_iter=3000).fit(ZO[idx], y[idx]).coef_[0]
+    for tr_i, va_i in StratifiedKFold(5, shuffle=True, random_state=42).split(y, y):
+        blind[va_i] = ZO[va_i] @ fitw(tr_i)
+    w = fitw(np.arange(len(y)))
+    print("katsayılar:", {k: round(float(x), 3) for k, x in sorted(zip(names, w), key=lambda t: -abs(t[1]))[:15]})
+    oo, pt = rank(ZO @ w), rank(ZP @ w)
+else:
+    for tr_i, va_i in StratifiedKFold(5, shuffle=True, random_state=42).split(y, y):
+        blind[va_i] = np.column_stack([O[k][va_i] for k in names]) @ hill(names, tr_i)
+    w = hill(names, np.arange(len(y)))
+    print("ağırlıklar:", {k: round(float(x), 3) for k, x in zip(names, w) if x})
+    oo, pt = np.column_stack([O[k] for k in names]) @ w, np.column_stack([P[k] for k in names]) @ w
+print(f"harman CV AUC: {roc_auc_score(y, oo):.5f}  (iç içe CV: {roc_auc_score(y, blind):.5f})")
 if os.environ.get("DEADZONE") == "1":  # ölü bölge: sıralamayı koruyarak en alta
     inc_tr = pd.read_csv("train.csv", usecols=["Annual_Income_USD"]).Annual_Income_USD.to_numpy()
     inc_te = pd.read_csv("test.csv", usecols=["Annual_Income_USD"]).Annual_Income_USD.to_numpy()
     zt, zv = (inc_tr >= 38174) & (inc_tr <= 41384), (inc_te >= 38174) & (inc_te <= 41384)
-    oo = np.column_stack([O[k] for k in names]) @ w
     oz = np.where(zt, oo * 1e-3 - 1, oo)
     print(f"ölü bölge: train {zt.sum()} satır ({int(y[zt].sum())} alım), OOF {roc_auc_score(y, oo):.6f} -> "
           f"{roc_auc_score(y, oz):.6f}; test {zv.sum()} satır en alta")
