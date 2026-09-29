@@ -42,7 +42,10 @@ if RMP:
 XF10 = [t for t in (f"{X}_f10_gpu", f"{X}_s7_f10_gpu", f"{X}_s11_f10_gpu") if os.path.exists(f"oof_{t}.npy")]
 if XF10:
     OWN["our_xgb_f10"] = ",".join(XF10)
-for k, t in {"our_cat_d8": f"{C}_d8_gpu", "our_cat_d5": f"{C}_d5", "our_cat_d5_f10": f"{C}_d5_f10"}.items():
+CF10 = [t for t in (f"{C}_d5_f10", f"{C}_d5_s7_f10") if os.path.exists(f"oof_{t}.npy")]  # CatBoost d5 10 kat
+if CF10:
+    OWN["our_cat_d5_f10"] = ",".join(CF10)
+for k, t in {"our_cat_d8": f"{C}_d8_gpu", "our_cat_d5": f"{C}_d5"}.items():
     if os.path.exists(f"oof_{t}.npy"):
         OWN[k] = t
 for k, tags in OWN.items():
@@ -81,7 +84,7 @@ for fo, ft in [("oof_six_views.csv", "test_six_views.csv"), ("oof_realmlp_g.csv"
 FULLMIX = float(os.environ.get("FULLMIX", "0"))
 FULLMAP = {"our_realmlp_f10": sorted(glob.glob("pred_pub_realmlp_full_s*.npy")),
            "our_xgb_f10": [f"pred_{t}_full.npy" for t in XF10 if os.path.exists(f"pred_{t}_full.npy")],
-           "our_cat_d5_f10": [f for f in [f"pred_{C}_d5_f10_full.npy"] if os.path.exists(f)]}
+           "our_cat_d5_f10": [f"pred_{t}_full.npy" for t in CF10 if os.path.exists(f"pred_{t}_full.npy")]}
 for k, files in FULLMAP.items():
     if FULLMIX and k in P and files:
         pf = rank(np.mean([np.load(f) for f in files], axis=0))

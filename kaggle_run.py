@@ -2,7 +2,8 @@
 dosyalarını buraya indirir. xgb ve cat GPU'da, lgbm CPU'da eğitilir (GPU etiketine _gpu eklenir).
 Kullanım: python kaggle_run.py "xgb base,freq,dig,te1 0.02" "cat base,freq,dig,te1 0.05"
           python kaggle_run.py "xgb base,freq,dig,te1 0.1 trials=40"   # Optuna araması
-          python kaggle_run.py --fetch   # son sürümü bekle, günlüğü göster, çıktıyı indir"""
+          python kaggle_run.py --fetch   # son sürümü bekle, günlüğü göster, çıktıyı indir
+PVEP_SLUG=<ad> başka bir not defteri (ve kernel_build_<ad> klasörü) kullanır."""
 import json
 import os
 import shutil
@@ -11,7 +12,8 @@ import time
 
 from kaggle import api
 
-SLUG, BUILD = "pvep-train", "kernel_build"
+SLUG = os.environ.get("PVEP_SLUG", "pvep-train")  # aynı anda ikinci iş için başka not defteri
+BUILD = "kernel_build" if SLUG == "pvep-train" else f"kernel_build_{SLUG}"
 REF = f"{api.get_config_value('username')}/{SLUG}"
 GROUPS = {"base", "freq", "freq2", "dig", "dig2", "recipe", "omean", "flag", "te1", "te3", "bins",
           "bins2", "tedig", "te2", "te2s", "ted", "ncat", "orig", "mb"}

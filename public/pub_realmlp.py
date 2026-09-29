@@ -4,6 +4,8 @@ Değişen yalnızca: not defteri komutları (%%time) kaldırıldı, veri yollar�
 PVEP_SEED ortam değişkeninden (varsayılan 42; katlar, başlangıç ve hedef kodlama bu tohumla), kat sayısı
 PVEP_FOLDS'tan (varsayılan 5), PVEP_PLUS=1 ile gelir haneleri ve ham sütunların hedef kodlaması eklenir
 (pvep eki), PVEP_FULL=1 ile CV'siz tüm train (yalnız pred_pub_realmlp[_plus]_full_s<tohum>.npy);
+PVEP_HOLD=h ile tam veri benzetimi (pvep eki): train'in 10 katlı bölmesinin (tohum 42, train.py hold= ile
+aynı) h. katı etiketli sahte test olur, kalan %90 ile CV ya da PVEP_FULL; çıktı adına _h<h> eklenir;
 çıktı oof_/pred_pub_realmlp[_plus][_f<kat>]_s<tohum>.npy. 5 katta tohum 42'nin
 katları train.py ile aynı. GPU."""
 import glob, os
@@ -11,8 +13,10 @@ SEED0 = int(os.environ.get("PVEP_SEED", "42"))
 FOLDS0 = int(os.environ.get("PVEP_FOLDS", "5"))
 PLUS = os.environ.get("PVEP_PLUS") == "1"  # pvep eki: gelir haneleri + ham sütunların hedef kodlaması
 FULL0 = os.environ.get("PVEP_FULL") == "1"  # pvep eki: CV yok, tüm train ile tek model, yalnız test tahmini
+HOLD0 = int(os.environ.get("PVEP_HOLD", "-1"))  # pvep eki: sahte test = train'in 10 katlı bölmesinin h. katı
 OUT = (f"pub_realmlp{'_plus' if PLUS else ''}"
-       f"{'_full' if FULL0 else ('' if FOLDS0 == 5 else f'_f{FOLDS0}')}_s{SEED0}")
+       f"{'_full' if FULL0 else ('' if FOLDS0 == 5 else f'_f{FOLDS0}')}"
+       f"{f'_h{HOLD0}' if HOLD0 >= 0 else ''}_s{SEED0}")
 
 
 def find(name):
@@ -56,6 +60,10 @@ ID = 'id'
 TARGET = 'Will_Buy_EV'
 train[TARGET] = train[TARGET].map({'No': 0, 'Yes': 1})
 orig[TARGET] = orig[TARGET].map({'No': 0, 'Yes': 1})
+if HOLD0 >= 0:  # pvep eki: tam veri benzetimi, gerçek test kullanılmaz
+    keep, hold = list(StratifiedKFold(10, shuffle=True, random_state=42).split(train, train[TARGET]))[HOLD0]
+    test = train.iloc[hold].drop(columns=[TARGET]).reset_index(drop=True)
+    train = train.iloc[keep].reset_index(drop=True)
 X = train.drop([ID, TARGET], axis=1); train_id = train[ID]
 y = train[TARGET]
 X_test = test.drop([ID], axis=1); test_id = test[ID]

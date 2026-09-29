@@ -6,8 +6,11 @@ Ayarlar (virgülle, ör. max_depth=7,subsample=0.9) modelin varsayılanlarını 
 seed=N model ve hedef kodlama tohumu (katlar sabit), folds=N kat sayısı (varsayılan 5), name=ad etikette
 ayarların yerine geçer, trials=N Optuna ile N deneme arar (dosya yazmaz, en iyi ayarları basar; şimdilik xgb),
 full=f CV'den sonra tüm train ile yeniden eğitir (katların ortalama ağaç sayısı x f), test tahminini
-pred_<etiket>_full.npy'ye yazar; solo=1 lgbm/xgb'de her ağacı tek sütunla sınırlar (interaction_constraints), pl=w her katta ikinci bir model
-eğitir: test satırları birinci aşamanın olasılıklarıyla yumuşak etiketli (ağırlık w) eğitime eklenir.
+pred_<etiket>_full.npy'ye yazar; hold=h tam veri benzetimi: train'in 10 katlı bölmesinin h. katı etiketli
+sahte test olur, kalan %90 ile CV (folds=9 önerilir) ve full=f; sahte testte kat ortalaması, tam veri
+(x0.9-1.3 ağaç) ve sıra karışımlarının AUC'si basılır (etikete _h<h> eklenir); solo=1 lgbm/xgb'de her
+ağacı tek sütunla sınırlar (interaction_constraints), pl=w her katta ikinci bir model eğitir: test
+satırları birinci aşamanın olasılıklarıyla yumuşak etiketli (ağırlık w) eğitime eklenir.
 Gruplar (virgülle): base, freq, freq2, dig, dig2, recipe, omean, flag, te1, te3, bins, bins2, tedig, te2,
 te2s, ted, ncat, orig, mb (lgbm/xgb max_bin=1024) (README'de sonuçlar)
 PVEP_GPU=1 ile xgb ve cat GPU'da eğitilir, etikete _gpu eklenir (kaggle_run.py bunu ayarlar)."""
@@ -52,14 +55,21 @@ TRIALS, NAME, MSEED = OVR.pop("trials", 0), OVR.pop("name", None), OVR.pop("seed
 FOLDS = OVR.pop("folds", FOLDS)  # 10 katta tohum 42 megayak OOF kütüphanesiyle aynı bölme
 PL = OVR.pop("pl", 0)  # pl=w: ikinci aşama, test satırlarını birinci aşamanın olasılıklarıyla (ağırlık w) görür
 FULL = OVR.pop("full", 0)  # full=f: CV sonrası tüm train ile, katların ortalama ağaç sayısı x f ile yeniden eğit
+HOLD = OVR.pop("hold", -1)  # hold=h: 10 katlı bölmenin h. katı etiketli sahte test (tam veri benzetimi)
 FULLNIT = OVR.pop("fullnit", 0)  # fullnit=N: CV yok, yalnız tüm train ile N ağaçlık model (ağaç sayısı önceden biliniyorsa)
 GPU = os.environ.get("PVEP_GPU") == "1" and model_name != "lgbm"  # pip LightGBM'i CUDA'sız
 
 train, test, orig = (pd.read_csv(f) for f in ("train.csv", "test.csv", "original.csv"))
+extra = test.iloc[:0]
+if HOLD >= 0:  # gerçek test yalnız frekanslar aynı kalsın diye allx'in sonunda durur
+    yall = (train[TARGET] == "Yes").to_numpy(int)
+    keep, hold = list(StratifiedKFold(10, shuffle=True, random_state=SEED).split(train, yall))[HOLD]
+    extra, test, train = test, train.iloc[hold].reset_index(drop=True), train.iloc[keep].reset_index(drop=True)
+    y_hold = yall[hold]
 y = (train[TARGET] == "Yes").to_numpy(int)
 yo = (orig[TARGET] == "Yes").to_numpy(int)
 n, m = len(train), len(test)
-allx = pd.concat([train[COLS], test[COLS], orig[COLS]], ignore_index=True)
+allx = pd.concat([train[COLS], test[COLS], orig[COLS], extra[COLS]], ignore_index=True)
 
 F = allx.copy()
 for c in CATS:
@@ -134,7 +144,7 @@ K = np.column_stack(list(keys.values())) if keys else None
 SMOOTH = ["auto", 10.0, 100.0] if "te3" in groups else ["auto"]  # hedef kodlama yumuşatmaları
 MB = {"max_bin": 1024} if "mb" in groups else {}
 
-X, X_test, X_orig = F.iloc[:n], F.iloc[n:n + m], F.iloc[n + m:]
+X, X_test, X_orig = F.iloc[:n], F.iloc[n:n + m], F.iloc[n + m:n + m + len(orig)]
 folds = list(StratifiedKFold(FOLDS, shuffle=True, random_state=SEED).split(X, y))
 use_orig = "orig" in groups
 
@@ -164,22 +174,26 @@ def solo(p, cols, names=False):  # solo=1: her ağaç tek sütun (toplamsal mode
     return {"interaction_constraints": groups} if p.pop("solo", 0) else {}
 
 
+top = lambda nit: max(nit) if isinstance(nit, list) else nit  # nit listesi: en büyüğüyle bir kez eğit
+many = lambda nit, f: np.column_stack([f(k) for k in nit]) if isinstance(nit, list) else f(nit)
+
+
 def lgbm(Xtr, ytr, Xva, yva, Xte, w=None, nit=None, **p):  # nit: sabit ağaç sayısı, erken durdurma yok
     p = p | solo(p, Xtr.columns)
     mdl = lgb.LGBMClassifier(**dict(n_estimators=20000, learning_rate=LR, num_leaves=63,
                                     min_child_samples=100, subsample=0.8, subsample_freq=1,
                                     colsample_bytree=0.5, reg_lambda=1.0, random_state=MSEED,
-                                    verbose=-1, **MB) | p | ({"n_estimators": nit} if nit else {}))
+                                    verbose=-1, **MB) | p | ({"n_estimators": top(nit)} if nit else {}))
     if nit:
         mdl.fit(Xtr, ytr, sample_weight=w)
-        return None, mdl.predict_proba(Xte)[:, 1], nit
+        return None, many(nit, lambda k: mdl.predict_proba(Xte, num_iteration=k)[:, 1]), nit
     mdl.fit(Xtr, ytr, sample_weight=w, eval_set=[(Xva, yva)], eval_metric="auc",
             callbacks=[lgb.early_stopping(int(20 / LR), verbose=False)])
     return mdl.predict_proba(Xva)[:, 1], mdl.predict_proba(Xte)[:, 1], mdl.best_iteration_
 
 
 def xgbm(Xtr, ytr, Xva, yva, Xte, w=None, nit=None, **p):
-    p = p | solo(p, Xtr.columns, names=True) | ({"n_estimators": nit, "early_stopping_rounds": None} if nit else {})
+    p = p | solo(p, Xtr.columns, names=True) | ({"n_estimators": top(nit), "early_stopping_rounds": None} if nit else {})
     mdl = xgb.XGBClassifier(**dict(n_estimators=20000, learning_rate=LR, max_depth=6,
                                    min_child_weight=5, subsample=0.8, colsample_bytree=0.5,
                                    reg_lambda=1.0, tree_method="hist",
@@ -189,7 +203,7 @@ def xgbm(Xtr, ytr, Xva, yva, Xte, w=None, nit=None, **p):
                                    n_jobs=4, **MB) | p)
     if nit:
         mdl.fit(Xtr, ytr, sample_weight=w, verbose=False)
-        return None, mdl.predict_proba(Xte)[:, 1], nit
+        return None, many(nit, lambda k: mdl.predict_proba(Xte, iteration_range=(0, k))[:, 1]), nit
     mdl.fit(Xtr, ytr, sample_weight=w, eval_set=[(Xva, yva)], verbose=False)
     return mdl.predict_proba(Xva)[:, 1], mdl.predict_proba(Xte)[:, 1], mdl.best_iteration + 1
 
@@ -202,10 +216,10 @@ def cat(Xtr, ytr, Xva, yva, Xte, w=None, nit=None, **p):
              border_count=254,  # GPU varsayılanı 128
              random_seed=MSEED, verbose=0, allow_writing_files=False) | p
     if nit:
-        q = {k: v for k, v in q.items() if k not in ("od_type", "od_wait")} | {"iterations": nit}
+        q = {k: v for k, v in q.items() if k not in ("od_type", "od_wait")} | {"iterations": top(nit)}
         mdl = CatBoostClassifier(**q)
         mdl.fit(s(Xtr), ytr, sample_weight=w)
-        return None, mdl.predict_proba(s(Xte))[:, 1], nit
+        return None, many(nit, lambda k: mdl.predict_proba(s(Xte), ntree_end=k)[:, 1]), nit
     mdl = CatBoostClassifier(**q)
     mdl.fit(s(Xtr), ytr, sample_weight=w, eval_set=(s(Xva), yva))
     return (mdl.predict_proba(s(Xva))[:, 1], mdl.predict_proba(s(Xte))[:, 1],
@@ -317,7 +331,7 @@ if TRIALS:  # kat verisi bir kez hazırlanır; her deneme 5 katlı CV AUC dönd�
 tag = (f"{model_name}_{'+'.join(sorted(groups))}_{LR}"
        + (f"_{NAME}" if NAME else "".join(f"_{k}={v}" for k, v in sorted(OVR.items())))
        + (f"_s{MSEED}" if MSEED != SEED else "") + (f"_f{FOLDS}" if FOLDS != 5 else "")
-       + (f"_pl{PL}" if PL else "") + ("_gpu" if GPU else ""))
+       + (f"_pl{PL}" if PL else "") + (f"_h{HOLD}" if HOLD >= 0 else "") + ("_gpu" if GPU else ""))
 if FULLNIT:  # etiket CV koşusununkiyle aynı, sonuna _full
     Xa, ya, _, Xta = fold_data(np.arange(n), None)
     _, pf, _ = MODELS[model_name](Xa, ya, None, None, Xta, nit=int(FULLNIT), **OVR)
@@ -344,7 +358,19 @@ print(f"{tag} CV AUC: {roc_auc_score(y, oof):.5f}  "
       f"[{time.time() - t0:.0f} sn, {Xtr.shape[1]} özellik]", flush=True)
 np.save(f"oof_{tag}.npy", oof)
 np.save(f"pred_{tag}.npy", pred)
-if FULL:  # tam veri: test tahmini tüm train'le eğitilmiş tek modelden (OOF yok; ağırlıklar yukarıdaki OOF'tan)
+if FULL and HOLD >= 0:  # benzetim: sahte testte kat ortalaması / tam veri / sıra karışımları
+    fs = [0.9, 1.0, 1.1, 1.2, 1.3]
+    Xa, ya, _, Xta = fold_data(np.arange(n), None)
+    _, pfs, _ = MODELS[model_name](Xa, ya, None, None, Xta, nit=[int(round(np.mean(its) * f)) for f in fs], **OVR)
+    np.save(f"pred_{tag}_full.npy", pfs)
+    rk = lambda a: pd.Series(a).rank(pct=True).to_numpy()
+    pf = pfs[:, fs.index(FULL)] if FULL in fs else pfs[:, 2]
+    print(f"sahte test ({len(y_hold)} satır) kat ortalaması {roc_auc_score(y_hold, pred):.6f} | tam "
+          + " ".join(f"x{f}: {roc_auc_score(y_hold, pfs[:, j]):.6f}" for j, f in enumerate(fs))
+          + f" | karışım (tam x{FULL} payı) " + " ".join(
+              f"{w}: {roc_auc_score(y_hold, (1 - w) * rk(pred) + w * rk(pf)):.6f}" for w in (0.25, 0.5, 0.75)),
+          flush=True)
+elif FULL:  # tam veri: test tahmini tüm train'le eğitilmiş tek modelden (OOF yok; ağırlıklar yukarıdaki OOF'tan)
     nit = int(round(np.mean(its) * FULL))
     Xa, ya, _, Xta = fold_data(np.arange(n), None)
     _, pf, _ = MODELS[model_name](Xa, ya, None, None, Xta, nit=nit, **OVR)
