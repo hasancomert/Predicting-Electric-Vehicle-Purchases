@@ -140,9 +140,13 @@ if GS20:
     P["pbe_glr_f20"] = rank(np.mean([aligned(rd(g, "TEST"), te.id, "test_pred") for g in GS20], axis=0))
     print(f"pbe_glr_f20: {len(GS20)} kat tohumu")
 # GLR'nin doğrusal logit'i üstüne artık MLP (pvep-pbe-mlp)
-if os.path.exists("ext/pbe-mlp/GENERATOR_AWARE_MLP_OOF.parquet"):
-    fo, ft = pd.read_parquet("ext/pbe-mlp/GENERATOR_AWARE_MLP_OOF.parquet"), pd.read_parquet("ext/pbe-mlp/GENERATOR_AWARE_MLP_TEST.parquet")
-    O["pbe_mlp"], P["pbe_mlp"] = rank(aligned(fo, tr.id, "oof_pred")), rank(aligned(ft, te.id, "test_pred"))
+for k, dirs in {"pbe_mlp": ("ext/pbe-mlp/", "ext/pbe-mlp-s7/", "ext/pbe-mlp-s11/"), "pbe_mlp_f20": ("ext/pbe-mlp-f20/",)}.items():
+    dirs = [g for g in dirs if os.path.exists(g + "GENERATOR_AWARE_MLP_OOF.parquet")]  # kat tohumları ortalanır
+    if dirs:
+        rm = lambda g, kind: pd.read_parquet(g + f"GENERATOR_AWARE_MLP_{kind}.parquet")
+        O[k] = rank(np.mean([aligned(rm(g, "OOF"), tr.id, "oof_pred") for g in dirs], axis=0))
+        P[k] = rank(np.mean([aligned(rm(g, "TEST"), te.id, "test_pred") for g in dirs], axis=0))
+        print(f"{k}: {len(dirs)} kat tohumu")
 # Aynı özellik matrisiyle lojistik regresyon yerine XGBoost (pvep-pbe-xgb)
 if os.path.exists("ext/pbe-xgb/GENERATOR_AWARE_XGB_OOF.parquet"):
     fo, ft = pd.read_parquet("ext/pbe-xgb/GENERATOR_AWARE_XGB_OOF.parquet"), pd.read_parquet("ext/pbe-xgb/GENERATOR_AWARE_XGB_TEST.parquet")
