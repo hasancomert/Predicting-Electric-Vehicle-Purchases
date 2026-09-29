@@ -33,6 +33,9 @@ if RM:
 RM10 = sorted(glob.glob("oof_pub_realmlp_f10_s*.npy"))  # 10 katlı RealMLP tohumları
 if RM10:
     OWN["our_realmlp_f10"] = ",".join(f[4:-4] for f in RM10)
+RMP = sorted(glob.glob("oof_pub_realmlp_plus_f10_s*.npy"))  # PVEP_PLUS=1 ile RealMLP (haneler + ham TE)
+if RMP:
+    OWN["our_realmlp_plus_f10"] = ",".join(f[4:-4] for f in RMP)
 XF10 = [t for t in (f"{X}_f10_gpu", f"{X}_s7_f10_gpu", f"{X}_s11_f10_gpu") if os.path.exists(f"oof_{t}.npy")]
 if XF10:
     OWN["our_xgb_f10"] = ",".join(XF10)

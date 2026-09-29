@@ -149,12 +149,30 @@ her modelde ~+0.0001: RealMLP 6 tohum 0.94611-0.94614 (ortalaması 0.94624; 5 ka
 7. gönderim: RealMLP 10 kat 0.333, XGBoost 10 kat, CatBoost d5 10 kat, megayak B, D (her biri 0.167); CV 0.94644,
 iç içe 0.94643.
 
+### Yeni desen arayışı (sonuç: bulunamadı)
+7. harmanın OOF'u izotonik kalibre edilip artıkları (y - p) gruplara göre incelendi; bir grupta artık
+ortalaması şanstan büyükse orada kaçırılan bir desen vardır.
+- `id` sırası: hedefle AUC 0.49999; 20 binlik bloklarda alım oranı rastgele dalgalanma sınırında.
+- Birebir tekrar eden satır: 955 bin satırda hiç yok.
+- En yakın orijinal satırın etiketi (orijinal gürültü çekilişini taşıyabilir diye): her mesafe diliminde
+  etiket uyumu modelin beklentisiyle aynı (ör. 0.798 / 0.798); sentetik satırlar orijinallerin kopyası değil.
+- ~300 gruplama (tüm sütun çiftleri ve üçlüleri, gelir/mesafe/yaş ızgaraları, hane x hane ve hane x
+  kategori, satın alma ve kaygı formülü tutarlılığı): en yüksek z 2.47, 225 testte şans düzeyi (~2.8).
+- Sütun birleşimini yasaklamak (`solo=1`, G. Mamarin'in açık analizinden): ham sütunlarda +0.00045 ama bizim
+  setimizde LightGBM lr 0.1 0.94576 -> 0.94554; harmana katkısı yok. `max_bin=15000` +0.00003.
+- RealMLP'ye gelir haneleri ve ham sütunların hedef kodlaması (`PVEP_PLUS=1`): 10 kat 0.94612 (değişmedi).
+- İkinci seviye: LightGBM istifleme 0.94575 (tahminleri kutulayıp sıralamayı kaybediyor); harmanı
+  `init_score` verip ham sütunlar + bileşen tahminleriyle düzeltme öğrenen model 1-8 ağaçta durdu, 0.94644
+  değişmedi. Yani ham sütunların hiçbir kombinasyonunda harmanın ötesinde öğrenilebilir yapı yok.
+- Tablonun tepesinin büyük kısmı (0.94657'de 98 takım) OOF'suz açık harman dosyalarının tekrar gönderilmesi.
+
 ### Açık not defterleri (`public/`)
 En iyi açık not defterlerinin uyarlamaları; kendi Kaggle not defterlerinde koşar, `oof_/pred_pub_*.npy`
 yazar ve `blend.py` ile harmanlanır (yazarlar dosya başında):
 - `pub_lgbm.py` (najiama, LightGBM, 5 kat, katlar `train.py` ile aynı): CV 0.94609 (Kaggle CPU, ~20 dk)
 - `pub_xgb.py` (evgendvorkin, XGBoost, 10 kat): CV 0.94607 (Kaggle T4, ~15 dk)
-- `pub_realmlp.py` (yekenot, RealMLP, PyTorch, 5 kat, `PVEP_SEED` tohumu): tohum başına ~0.9460 (Kaggle T4, ~5 dk)
+- `pub_realmlp.py` (yekenot, RealMLP, PyTorch, `PVEP_SEED` tohumu, `PVEP_FOLDS`, `PVEP_PLUS`): 5 katta tohum başına
+  ~0.9460 (Kaggle T4, ~5 dk), 10 katta ~0.9461 (~11 dk)
 Kaggle'da çalıştırmak için dosyayı `kernel-metadata.json` (`enable_gpu`, yarışma ve orijinal veri kaynakları)
 ile bir klasöre koyup `kaggle kernels push -p <klasör>`, bitince
 `kaggle kernels output <kullanıcı>/<slug> -p <klasör>`.
@@ -170,6 +188,7 @@ Dosya adı `pevpsubmissionN.csv`.
 | 5 | XGBoost `t1` 3 tohum, CatBoost 2 tohum, `pub_lgbm`, `pub_xgb` (her biri 0.25) | 0.94626 | 0.94637 |
 | 6 | sıra uzayında, açık OOF kütüphaneleri + RealMLP 6 tohum (`blend_ext.py`, aşağıda) | 0.94642 (iç içe 0.94641) | 0.94642 |
 | 7 | 6. gönderimin yapısı, kendi modellerimiz 10 katla (`folds=10`) | 0.94644 (iç içe 0.94643) | 0.94644 |
+| 8 | 7. + RealMLP `PVEP_PLUS` 2 tohum (desen arayışının artığı) | 0.94645 (iç içe 0.94644) | |
 
 1. gönderimin tek modelleri: LightGBM 0.94190 (~3 dk), CatBoost 0.94178 (~22 dk, 4 çekirdek CPU).
 2. gönderimin tek modelleri (base,freq,dig,te1): LightGBM lr 0.02 0.94562 (5.5 dk),
