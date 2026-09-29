@@ -4,7 +4,8 @@ nn: PyTorch MLP (sayısallar normal kantile, kategorikler gömme); lr ~0.002, ay
 emb, epochs, bs, wd, lowcat (en çok bu kadar farklı değerli sayısallara da gömme).
 Ayarlar (virgülle, ör. max_depth=7,subsample=0.9) modelin varsayılanlarını ezer ve etikete eklenir;
 seed=N model ve hedef kodlama tohumu (katlar sabit), folds=N kat sayısı (varsayılan 5), name=ad etikette
-ayarların yerine geçer, trials=N Optuna ile N deneme arar (dosya yazmaz, en iyi ayarları basar; şimdilik xgb).
+ayarların yerine geçer, trials=N Optuna ile N deneme arar (dosya yazmaz, en iyi ayarları basar; şimdilik xgb),
+solo=1 lgbm/xgb'de her ağacı tek sütunla sınırlar (interaction_constraints).
 Gruplar (virgülle): base, freq, freq2, dig, dig2, recipe, omean, flag, te1, te3, bins, bins2, tedig, te2,
 te2s, ted, ncat, orig, mb (lgbm/xgb max_bin=1024) (README'de sonuçlar)
 PVEP_GPU=1 ile xgb ve cat GPU'da eğitilir, etikete _gpu eklenir (kaggle_run.py bunu ayarlar)."""
@@ -152,7 +153,13 @@ def fold_data(tr, va):
     return Xtr, ytr, Xva, Xte
 
 
+def solo(p, cols, names=False):  # solo=1: her ağaç tek sütun (toplamsal model, sütun birleşimi yok)
+    groups = [[c] for c in cols] if names else [[i] for i in range(len(cols))]  # xgb sütun adı ister
+    return {"interaction_constraints": groups} if p.pop("solo", 0) else {}
+
+
 def lgbm(Xtr, ytr, Xva, yva, Xte, **p):
+    p = p | solo(p, Xtr.columns)
     mdl = lgb.LGBMClassifier(**dict(n_estimators=20000, learning_rate=LR, num_leaves=63,
                                     min_child_samples=100, subsample=0.8, subsample_freq=1,
                                     colsample_bytree=0.5, reg_lambda=1.0, random_state=MSEED,
@@ -163,6 +170,7 @@ def lgbm(Xtr, ytr, Xva, yva, Xte, **p):
 
 
 def xgbm(Xtr, ytr, Xva, yva, Xte, **p):
+    p = p | solo(p, Xtr.columns, names=True)
     mdl = xgb.XGBClassifier(**dict(n_estimators=20000, learning_rate=LR, max_depth=6,
                                    min_child_weight=5, subsample=0.8, colsample_bytree=0.5,
                                    reg_lambda=1.0, tree_method="hist",

@@ -2,12 +2,14 @@
 https://www.kaggle.com/code/yekenot/ps-s6-e9-realmlp-pytorch
 Değişen yalnızca: not defteri komutları (%%time) kaldırıldı, veri yolları (Kaggle'da glob), tohum
 PVEP_SEED ortam değişkeninden (varsayılan 42; katlar, başlangıç ve hedef kodlama bu tohumla), kat sayısı
-PVEP_FOLDS'tan (varsayılan 5) ve çıktı oof_/pred_pub_realmlp[_f<kat>]_s<tohum>.npy. 5 katta tohum 42'nin
+PVEP_FOLDS'tan (varsayılan 5), PVEP_PLUS=1 ile gelir haneleri ve ham sütunların hedef kodlaması eklenir
+(pvep eki); çıktı oof_/pred_pub_realmlp[_plus][_f<kat>]_s<tohum>.npy. 5 katta tohum 42'nin
 katları train.py ile aynı. GPU."""
 import glob, os
 SEED0 = int(os.environ.get("PVEP_SEED", "42"))
 FOLDS0 = int(os.environ.get("PVEP_FOLDS", "5"))
-OUT = f"pub_realmlp{'' if FOLDS0 == 5 else f'_f{FOLDS0}'}_s{SEED0}"
+PLUS = os.environ.get("PVEP_PLUS") == "1"  # pvep eki: gelir haneleri + ham sütunların hedef kodlaması
+OUT = f"pub_realmlp{'_plus' if PLUS else ''}{'' if FOLDS0 == 5 else f'_f{FOLDS0}'}_s{SEED0}"
 
 
 def find(name):
@@ -113,6 +115,9 @@ def feature_engineering(df, fit=False):
         decimal_name = f"_{col}_decimal"
         df[decimal_name] = (df[col] % 1).round(2).astype('float32')
     df['Annual_Income_USD_is_multiple_10_'] = (np.floor(df['Annual_Income_USD']) % 10 == 0).astype('category')
+    if PLUS:  # pvep eki: gelirin haneleri, kategori olarak
+        for k in range(4):
+            df[f'Income_digit{k}_'] = (np.floor(df['Annual_Income_USD']) // 10 ** k % 10).astype('int32').astype('category')
 
     # Target encoding from orig
     for col in ['Annual_Income_USD']:
@@ -180,6 +185,7 @@ def feature_engineering(df, fit=False):
 X, new_cat_cols, new_num_cols, combo_names = feature_engineering(X, fit=True)
 X_test, _, _, _ = feature_engineering(X_test, fit=False)
 cat_cols += new_cat_cols; num_cols += new_num_cols
+RAW_COLS = [c for c in X.columns if not c.endswith('_') and not c.startswith('_')]  # pvep eki: 13 ham sütun
 print("len(new_cat_cols):", len(new_cat_cols))
 print("len(new_num_cols):", len(new_num_cols), "\n")
 
@@ -886,7 +892,7 @@ for fold, (tr_idx, val_idx) in enumerate(skf.split(X, y), 1):
     X_tst = X_test.copy()    
 
     if TE:
-        te_cols = combo_names
+        te_cols = combo_names + (RAW_COLS if PLUS else [])
         TE = TargetEncoder(cv=FOLDS, smooth='auto', shuffle=True, random_state=SEED)
         tr_enc = TE.fit_transform(X_tr[te_cols], y_tr)
         val_enc = TE.transform(X_val[te_cols])
