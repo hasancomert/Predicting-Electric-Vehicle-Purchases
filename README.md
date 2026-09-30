@@ -239,6 +239,32 @@ Kaggle'da çalıştırmak için dosyayı `kernel-metadata.json` (`enable_gpu`, y
 ile bir klasöre koyup `kaggle kernels push -p <klasör>`, bitince
 `kaggle kernels output <kullanıcı>/<slug> -p <klasör>`.
 
+## Son gönderimi (19) yeniden üretmek
+Kaggle'da çalışan işler (`<kullanıcı>` yerine kendi Kaggle adınız; `kaggle_run.py` ve not defterlerindeki `hasancmert`
+de değiştirilmeli):
+1. GPT-2 eşlemesi: `cp gpt2tok.py notebooks/gpt2tok/ && kaggle kernels push -p notebooks/gpt2tok`
+   (çıktısı `gpt2_income_tokens.csv`; depo köküne de kopyalayın).
+2. GLR ailesi (`notebooks/README.md`): `glr`, `glr_margin`, `glr_margin_f20`, `glr_mlp` (+ 20 kat varyantı),
+   `glr_xgb`; çıktı parquet'leri `ext/pbe-glr/`, `ext/pbe-glr-f20/`, `ext/pbe-mlp/`, `ext/pbe-mlp-f20/`,
+   `ext/pbe-xgb/` altına.
+3. Ağaç modelleri (`S=base,freq,dig,dig2,te1,te3,bins,tok,chain`, `T1` = README'deki `t1` ayarları ve `name=t1`):
+   - `python kaggle_run.py "xgb $S 0.02 $T1,folds=10" "xgb $S 0.02 $T1,folds=20"` (düz XGBoost 10/20 kat)
+   - `python kaggle_run.py "xgb $S 0.02 $T1,folds=10,margin=1" "xgb $S 0.02 $T1,folds=20,margin=1"` (+ `seed=7`)
+   - `PVEP_CPU=1 PVEP_SLUG=<ad> python kaggle_run.py "cat $S 0.05 depth=5,name=d5,folds=10,margin=1"`,
+     aynısı `margin`'siz ve LightGBM `pubp` ayarlarıyla `folds=10`
+4. RealMLP: `public/pub_realmlp.py`, `PVEP_TOK=1 PVEP_FOLDS=10` (6 tohum) ve `PVEP_FOLDS=20` (3 tohum), girdi olarak
+   `pvep-gpt2tok` bağlı.
+5. Açık OOF'lar: `blend_ext.py`'nin başındaki indirme komutları (megayak, residual-stack, heuljax XGB Sample,
+   BlamerX, goodpjw2008) `ext/` altına.
+6. Harman: `AVGW=1 RULES=1 python blend_ext.py pevpsubmission19 our_xgb_tokchain_f20,our_xgb_tokchain_f10,`
+   `our_lgbm_tokchain_f10,our_lgbm_tokchain_f20,our_cat_tokchain_f10,our_cat_tok_f10,our_realmlp_tok_f10,`
+   `our_realmlp_tok_f20,pbe_glr,pbe_glr_f20,pbe_mlp,pbe_mlp_f20,pbe_xgb,pbe_realmlp,mv_D,rs_v19,rs_jaz,medvax_blamerx,`
+   `gp_resid_lgbm,gp_resid_xgb,gp_glm5,heuljax_xgb,blamerx_win,our_xgb_tokchain_mg,our_xgb_t2_tokchain_mg,`
+   `our_lgbm_tokchain_mg,our_cat_tokchain_mg,our_xgb_tokchain_mg_f20` (virgüllerle tek parça) - seçilen ağırlıklar:
+   artık XGBoost 20 kat 0.28, RealMLP+tok 0.13, heuljax XGB / GLR-XGBoost / residual-stack v19 0.09'ar, artık
+   CatBoost 0.07, gerisi küçük.
+Tüm model çıktıları (npy, parquet, gönderimler) özel Kaggle veri setinde yedekli: `hasancmert/pvep-model-outputs`.
+
 ## Gönderimler
 Dosya adı `pevpsubmissionN.csv`.
 | No | İçerik | CV AUC | Public LB |
