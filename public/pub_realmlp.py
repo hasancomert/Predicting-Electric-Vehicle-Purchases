@@ -13,10 +13,11 @@ import glob, os
 SEED0 = int(os.environ.get("PVEP_SEED", "42"))
 FOLDS0 = int(os.environ.get("PVEP_FOLDS", "5"))
 PLUS = os.environ.get("PVEP_PLUS") == "1"  # pvep eki: gelir haneleri + ham sütunların hedef kodlaması
+MARG = os.environ.get("PVEP_MARGIN") == "1"  # pvep eki: GLR'nin sızıntısız logit'i ek sayısal özellik (glr_margins.npz)
 TOKF = os.environ.get("PVEP_TOK") == "1"  # pvep eki: gelirin GPT-2 BPE parçaları (kategori + hedef kodlama)
 FULL0 = os.environ.get("PVEP_FULL") == "1"  # pvep eki: CV yok, tüm train ile tek model, yalnız test tahmini
 HOLD0 = int(os.environ.get("PVEP_HOLD", "-1"))  # pvep eki: sahte test = train'in 10 katlı bölmesinin h. katı
-OUT = (f"pub_realmlp{'_plus' if PLUS else ''}{'_tok' if TOKF else ''}"
+OUT = (f"pub_realmlp{'_plus' if PLUS else ''}{'_tok' if TOKF else ''}{'_mg' if MARG else ''}"
        f"{'_full' if FULL0 else ('' if FOLDS0 == 5 else f'_f{FOLDS0}')}"
        f"{f'_h{HOLD0}' if HOLD0 >= 0 else ''}_s{SEED0}")
 
@@ -928,6 +929,12 @@ for fold, (tr_idx, val_idx) in enumerate(skf.split(X, y), 1):
     y_tr = y.iloc[tr_idx]
     y_val = y.iloc[val_idx]
     X_tst = X_test.copy()    
+    if MARG:  # pvep eki: eğitim satırları iç kat, doğrulama/test dış kat GLR logit'i (katlar 10, tohum 42 olmalı)
+        assert FOLDS == 10 and SEED == 42
+        MGD = np.load(find('glr_margins.npz'))
+        X_tr['_glr_logit'] = MGD['fit'][fold - 1][tr_idx]; X_val['_glr_logit'] = MGD['oof'][val_idx]
+        X_tst['_glr_logit'] = MGD['test'][fold - 1]
+        assert np.isfinite(X_tr['_glr_logit']).all()
 
     if TE:
         te_cols = combo_names + (RAW_COLS if PLUS else []) + (TOK_COLS if TOKF else [])

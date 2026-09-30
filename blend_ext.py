@@ -66,8 +66,12 @@ for k, tags in {"our_xgb_tok_f10": [f"{XT}_f10_gpu", f"{XT}_s7_f10_gpu", f"{XT}_
                 "our_lgbm_tokchain_f20": ["lgbm_base+bins+chain+dig+dig2+freq+te1+te3+tok_0.02_pubp_f20"],
                 # GLR logit'inden başlayan artık modeller (margin=1)
                 "our_xgb_tokchain_mg": [f"xgb_base+bins+chain+dig+dig2+freq+te1+te3+tok_0.02_t1{s}_f10_mg_gpu"
-                                        for s in ("", "_s7")],
-                "our_lgbm_tokchain_mg": ["lgbm_base+bins+chain+dig+dig2+freq+te1+te3+tok_0.02_pubp_f10_mg"],
+                                        for s in ("", "_s7", "_s11", "_s23")],
+                "our_xgb_t2_tokchain_mg": ["xgb_base+bins+chain+dig+dig2+freq+te1+te3+tok_0.02_t2_f10_mg_gpu"],
+                "our_lgbm_tokchain_mg": [f"lgbm_base+bins+chain+dig+dig2+freq+te1+te3+tok_0.02_pubp{s}_f10_mg"
+                                         for s in ("", "_s7")],
+                "our_cat_tokchain_mg": ["cat_base+bins+chain+dig+dig2+freq+te1+te3+tok_0.05_d5_f10_mg"],
+                "our_realmlp_tok_mg": [f[4:-4] for f in sorted(glob.glob("oof_pub_realmlp_tok_mg_f10_s*.npy"))],
                 "our_realmlp_tok_f20": [f[4:-4] for f in sorted(glob.glob("oof_pub_realmlp_tok_f20_s*.npy"))]}.items():
     tags = [t for t in tags if os.path.exists(f"oof_{t}.npy")]
     if tags:
