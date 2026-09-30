@@ -36,8 +36,9 @@ for src, dst in [("train.csv", "train.csv"), ("test.csv", "test.csv"),
     os.symlink(find(src), dst)
 for f in glob.glob("/kaggle/input/**/gpt2_income_tokens.csv", recursive=True)[:1]:
     os.symlink(f, "gpt2_income_tokens.csv")
-for f in glob.glob("/kaggle/input/**/glr_margins.npz", recursive=True)[:1]:
-    os.symlink(f, "glr_margins.npz")
+for f in glob.glob("/kaggle/input/**/glr_margins*.npz", recursive=True):
+    if not os.path.exists(os.path.basename(f)):
+        os.symlink(f, os.path.basename(f))
 with open("train.py", "w") as f:
     f.write(TRAIN)
 env = dict(os.environ, PVEP_GPU="1" if shutil.which("nvidia-smi") else "0")
@@ -68,7 +69,8 @@ def push(jobs):
                 dataset_sources=["itzzomkar/ev-adoption-behavior-and-range-anxiety"],
                 kernel_sources=([TOKSRC] if any(g in job.split()[1].split(",") for job in jobs
                                                 for g in ("tok", "tokx", "mix", "chain")) else [])
-                               + (["hasancmert/pvep-glr-margin"] if any("margin=1" in job for job in jobs) else []),
+                               + (["hasancmert/pvep-glr-margin", "hasancmert/pvep-glr-margin-f20"]
+                                  if any("margin=1" in job for job in jobs) else []),
                 model_sources=[])
     with open(f"{BUILD}/kernel-metadata.json", "w") as f:
         json.dump(meta, f, indent=2)

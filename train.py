@@ -427,9 +427,9 @@ if FULLNIT:  # etiket CV koşusununkiyle aynı, sonuna _full
     print(f"{tag}_full: {int(FULLNIT)} ağaç, tüm train [{time.time() - t0:.0f} sn]", flush=True)
     sys.exit()
 oof, pred, oof1, its = np.zeros(n), np.zeros(m), np.zeros(n), []
-if MARGIN:  # katlar GLR not defteriyle aynı olmalı (10 kat, tohum 42)
-    MG = np.load("glr_margins.npz")
-    assert FOLDS == 10 and not use_orig and HOLD < 0 and np.isfinite(MG["oof"]).all()
+if MARGIN:  # katlar GLR not defteriyle aynı olmalı (tohum 42; 10 kat glr_margins.npz, 20 kat glr_margins_f20.npz)
+    MG = np.load("glr_margins.npz" if FOLDS == 10 else f"glr_margins_f{FOLDS}.npz")
+    assert MG["fit"].shape[0] == FOLDS and not use_orig and HOLD < 0 and np.isfinite(MG["oof"]).all()
 for i, (tr, va) in enumerate(folds):
     Xtr, ytr, Xva, Xte = fold_data(tr, va)
     mg = {"mg": (MG["fit"][i][tr], MG["oof"][va], MG["test"][i])} if MARGIN else {}
