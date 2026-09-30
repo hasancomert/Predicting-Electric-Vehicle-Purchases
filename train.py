@@ -56,6 +56,7 @@ TRIALS, NAME, MSEED = OVR.pop("trials", 0), OVR.pop("name", None), OVR.pop("seed
 FOLDS = OVR.pop("folds", FOLDS)  # 10 katta tohum 42 megayak OOF kütüphanesiyle aynı bölme
 PL = OVR.pop("pl", 0)  # pl=w: ikinci aşama, test satırlarını birinci aşamanın olasılıklarıyla (ağırlık w) görür
 FULL = OVR.pop("full", 0)  # full=f: CV sonrası tüm train ile, katların ortalama ağaç sayısı x f ile yeniden eğit
+MARGIN = OVR.pop("margin", 0)  # margin=1: GLR logit'inden başlayan artık model (glr_margins.npz, 10 kat tohum 42)
 HOLD = OVR.pop("hold", -1)  # hold=h: 10 katlı bölmenin h. katı etiketli sahte test (tam veri benzetimi)
 FULLNIT = OVR.pop("fullnit", 0)  # fullnit=N: CV yok, yalnız tüm train ile N ağaçlık model (ağaç sayısı önceden biliniyorsa)
 GPU = os.environ.get("PVEP_GPU") == "1" and model_name != "lgbm"  # pip LightGBM'i CUDA'sız
@@ -248,7 +249,7 @@ top = lambda nit: max(nit) if isinstance(nit, list) else nit  # nit listesi: en 
 many = lambda nit, f: np.column_stack([f(k) for k in nit]) if isinstance(nit, list) else f(nit)
 
 
-def lgbm(Xtr, ytr, Xva, yva, Xte, w=None, nit=None, **p):  # nit: sabit ağaç sayısı, erken durdurma yok
+def lgbm(Xtr, ytr, Xva, yva, Xte, w=None, nit=None, mg=None, **p):  # nit: sabit ağaç sayısı; mg: başlangıç logit'leri
     p = p | solo(p, Xtr.columns)
     mdl = lgb.LGBMClassifier(**dict(n_estimators=20000, learning_rate=LR, num_leaves=63,
                                     min_child_samples=100, subsample=0.8, subsample_freq=1,
@@ -257,12 +258,17 @@ def lgbm(Xtr, ytr, Xva, yva, Xte, w=None, nit=None, **p):  # nit: sabit ağaç s
     if nit:
         mdl.fit(Xtr, ytr, sample_weight=w)
         return None, many(nit, lambda k: mdl.predict_proba(Xte, num_iteration=k)[:, 1]), nit
+    if mg is not None:  # artık model: GLR logit'i init_score, tahmin = sigmoid(ham skor + logit)
+        mdl.fit(Xtr, ytr, sample_weight=w, init_score=mg[0], eval_set=[(Xva, yva)], eval_init_score=[mg[1]],
+                eval_metric="auc", callbacks=[lgb.early_stopping(int(20 / LR), verbose=False)])
+        sg = lambda X, m: 1 / (1 + np.exp(-(mdl.predict(X, raw_score=True) + m)))
+        return sg(Xva, mg[1]), sg(Xte, mg[2]), mdl.best_iteration_
     mdl.fit(Xtr, ytr, sample_weight=w, eval_set=[(Xva, yva)], eval_metric="auc",
             callbacks=[lgb.early_stopping(int(20 / LR), verbose=False)])
     return mdl.predict_proba(Xva)[:, 1], mdl.predict_proba(Xte)[:, 1], mdl.best_iteration_
 
 
-def xgbm(Xtr, ytr, Xva, yva, Xte, w=None, nit=None, **p):
+def xgbm(Xtr, ytr, Xva, yva, Xte, w=None, nit=None, mg=None, **p):
     p = p | solo(p, Xtr.columns, names=True) | ({"n_estimators": top(nit), "early_stopping_rounds": None} if nit else {})
     mdl = xgb.XGBClassifier(**dict(n_estimators=20000, learning_rate=LR, max_depth=6,
                                    min_child_weight=5, subsample=0.8, colsample_bytree=0.5,
@@ -274,6 +280,11 @@ def xgbm(Xtr, ytr, Xva, yva, Xte, w=None, nit=None, **p):
     if nit:
         mdl.fit(Xtr, ytr, sample_weight=w, verbose=False)
         return None, many(nit, lambda k: mdl.predict_proba(Xte, iteration_range=(0, k))[:, 1]), nit
+    if mg is not None:  # artık model: GLR logit'i base_margin
+        mdl.fit(Xtr, ytr, sample_weight=w, base_margin=mg[0], eval_set=[(Xva, yva)], base_margin_eval_set=[mg[1]],
+                verbose=False)
+        return (mdl.predict_proba(Xva, base_margin=mg[1])[:, 1], mdl.predict_proba(Xte, base_margin=mg[2])[:, 1],
+                mdl.best_iteration + 1)
     mdl.fit(Xtr, ytr, sample_weight=w, eval_set=[(Xva, yva)], verbose=False)
     return mdl.predict_proba(Xva)[:, 1], mdl.predict_proba(Xte)[:, 1], mdl.best_iteration + 1
 
@@ -401,7 +412,8 @@ if TRIALS:  # kat verisi bir kez hazırlanır; her deneme 5 katlı CV AUC dönd�
 tag = (f"{model_name}_{'+'.join(sorted(groups))}_{LR}"
        + (f"_{NAME}" if NAME else "".join(f"_{k}={v}" for k, v in sorted(OVR.items())))
        + (f"_s{MSEED}" if MSEED != SEED else "") + (f"_f{FOLDS}" if FOLDS != 5 else "")
-       + (f"_pl{PL}" if PL else "") + (f"_h{HOLD}" if HOLD >= 0 else "") + ("_gpu" if GPU else ""))
+       + (f"_pl{PL}" if PL else "") + (f"_h{HOLD}" if HOLD >= 0 else "") + ("_mg" if MARGIN else "")
+       + ("_gpu" if GPU else ""))
 if FULLNIT:  # etiket CV koşusununkiyle aynı, sonuna _full
     Xa, ya, _, Xta = fold_data(np.arange(n), None)
     _, pf, _ = MODELS[model_name](Xa, ya, None, None, Xta, nit=int(FULLNIT), **OVR)
@@ -409,9 +421,15 @@ if FULLNIT:  # etiket CV koşusununkiyle aynı, sonuna _full
     print(f"{tag}_full: {int(FULLNIT)} ağaç, tüm train [{time.time() - t0:.0f} sn]", flush=True)
     sys.exit()
 oof, pred, oof1, its = np.zeros(n), np.zeros(m), np.zeros(n), []
+if MARGIN:  # katlar GLR not defteriyle aynı olmalı (10 kat, tohum 42)
+    MG = np.load("glr_margins.npz")
+    assert FOLDS == 10 and not use_orig and HOLD < 0 and np.isfinite(MG["oof"]).all()
 for i, (tr, va) in enumerate(folds):
     Xtr, ytr, Xva, Xte = fold_data(tr, va)
-    oof[va], p, it = MODELS[model_name](Xtr, ytr, Xva, y[va], Xte, **OVR)
+    mg = {"mg": (MG["fit"][i][tr], MG["oof"][va], MG["test"][i])} if MARGIN else {}
+    if MARGIN:
+        assert np.isfinite(mg["mg"][0]).all()  # eğitim satırlarının hepsinin iç-kat logit'i olmalı
+    oof[va], p, it = MODELS[model_name](Xtr, ytr, Xva, y[va], Xte, **OVR, **mg)
     if PL:  # sözde etiket: bu katın etiketlerini görmemiş birinci aşamanın test olasılıkları, sızıntısız
         oof1[va] = oof[va]
         Xpl = pd.concat([Xtr, Xte, Xte], ignore_index=True)
