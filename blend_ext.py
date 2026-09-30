@@ -214,9 +214,12 @@ if os.environ.get("STACK") == "1":  # lojistik regresyonla istifleme: probit(sı
     print("katsayılar:", {k: round(float(x), 3) for k, x in sorted(zip(names, w), key=lambda t: -abs(t[1]))[:15]})
     oo, pt = rank(ZO @ w), rank(ZP @ w)
 else:
+    ws = []
     for tr_i, va_i in StratifiedKFold(5, shuffle=True, random_state=42).split(y, y):
-        blind[va_i] = np.column_stack([O[k][va_i] for k in names]) @ hill(names, tr_i)
-    w = hill(names, np.arange(len(y)))
+        ws.append(hill(names, tr_i))
+        blind[va_i] = np.column_stack([O[k][va_i] for k in names]) @ ws[-1]
+    # AVGW=1: iç içe katlarda seçilen 5 ağırlık vektörünün ortalaması (tek seferlik tüm-veri seçiminden daha sağlam)
+    w = np.mean(ws, axis=0) if os.environ.get("AVGW") == "1" else hill(names, np.arange(len(y)))
     print("ağırlıklar:", {k: round(float(x), 3) for k, x in zip(names, w) if x})
     oo, pt = np.column_stack([O[k] for k in names]) @ w, np.column_stack([P[k] for k in names]) @ w
 print(f"harman CV AUC: {roc_auc_score(y, oo):.5f}  (iç içe CV: {roc_auc_score(y, blind):.5f})")
