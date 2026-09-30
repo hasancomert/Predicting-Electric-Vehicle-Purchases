@@ -180,6 +180,9 @@ goodpjw2008'in "LR-Margin GBDT + OOF Stack" not defteri (Public LB 0.94675): GLR
 olarak verilen artık LightGBM/XGBoost 5 katta 0.94646 (bizimle korelasyon 0.9968); heuljax XGB Sample 0.94631
 (0.9918, en farklı üye). Sınır kuralları trende kusursuz: gelir >= 170537 393/393 alım; 31004-41970 0/1257,
 mesafe >= 83 km 0/186, gelir 30000 + sübvansiyonsuz + (ilgi 1 ya da kaygı orta/yüksek) 0/7157 (`RULES=1`, OOF +0.000001).
+Aynı artık yöntemi bizim tok+chain özelliklerimizle (`train.py ... margin=1`, GLR logit'leri `pvep-glr-margin` not
+defterinde bizim 10 katımızla, eğitim satırları iç 5 katla): XGBoost 0.94652/0.94648 -> 0.94658/0.94654, LightGBM
+0.94650 -> 0.94656 (her modelde ~+0.00006); harmana katkısı iç içe CV'de +0.00001.
 
 ### Tam veri eğitimi benzetimi (sonuç: kazanç yok)
 `train.py ... hold=h,folds=9,full=1.1`: train'in %10'u etiketli sahte test, kalan %90 ile 9 katlı CV ve tam
@@ -250,6 +253,7 @@ Dosya adı `pevpsubmissionN.csv`.
 | 14 | 13. + 20 kat (her model verinin %95'i): XGBoost tok+chain 20 kat 2 tohum 0.2 (10 kat yerine), GLR 20 kat 0.1 (+ 3 tohumlu 10 kat 0.1) | 0.94669 (iç içe 0.94668) || **0.94671** |
 | 15 | tok'lu 18 model (XGBoost/LightGBM/CatBoost/RealMLP 10 ve 20 kat, GLR, GLR üstüne MLP, GLR özellikli XGBoost ve RealMLP, megayak D, residual-stack v19/jaz, BlamerX) probit(sıra) üzerinde lojistik regresyonla istiflendi (`STACK=1`; katsayılar 0.18-0.20, neredeyse eşit ortalama), ölü bölge | 0.94669 (iç içe 0.94669) || **0.94671** |
 | 16 | 15.'in adayları + goodpjw2008'in GLR logit'inden başlayan artık LightGBM/XGBoost (0.94646), heuljax XGB Sample (0.94631), BlamerX pencere XGBoost; tepe tırmanma (XGB tok+chain 20 kat 0.2, GLR-MLP 20 kat 0.2, artık LightGBM, heuljax XGB, GLR-XGB, LightGBM tok+chain, RealMLP+tok, residual-stack v19 0.1); dört sınır kuralı (`RULES=1`) | 0.94671 (iç içe 0.94670) || **0.94673** |
+| 17 (aday) | 16. + GLR logit'inden artık XGBoost tok+chain (`margin=1`, 0.94658/0.94654; ağırlık 0.3) | 0.94672 (iç içe 0.94671) | |
 
 1. gönderimin tek modelleri: LightGBM 0.94190 (~3 dk), CatBoost 0.94178 (~22 dk, 4 çekirdek CPU).
 2. gönderimin tek modelleri (base,freq,dig,te1): LightGBM lr 0.02 0.94562 (5.5 dk),
