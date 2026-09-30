@@ -147,6 +147,20 @@ for k, dirs in {"pbe_mlp": ("ext/pbe-mlp/", "ext/pbe-mlp-s7/", "ext/pbe-mlp-s11/
         O[k] = rank(np.mean([aligned(rm(g, "OOF"), tr.id, "oof_pred") for g in dirs], axis=0))
         P[k] = rank(np.mean([aligned(rm(g, "TEST"), te.id, "test_pred") for g in dirs], axis=0))
         print(f"{k}: {len(dirs)} kat tohumu")
+# goodpjw2008 "LR-Margin GBDT + OOF Stack" (GLR logit'inden başlayan artık LightGBM/XGBoost, 5 kat) ve heuljax XGB Sample
+GP = "ext/s6e9-lr-margin-gbdt-oof-stack-lb-0-94675/"
+if os.path.exists(GP + "oof_mine.csv"):
+    fo, ft = pd.read_csv(GP + "oof_mine.csv"), pd.read_csv(GP + "test_mine.csv")
+    for c, k in (("residual_lgbm", "gp_resid_lgbm"), ("residual_xgb", "gp_resid_xgb"), ("glm", "gp_glm5")):
+        O[k], P[k] = rank(aligned(fo, tr.id, c)), rank(aligned(ft, te.id, c))
+HX = "ext/kps6e09-xgb-sample/"
+if os.path.exists(HX + "oof/XGB_SAMPLE_OOF.parquet"):
+    fo, ft = pd.read_parquet(HX + "oof/XGB_SAMPLE_OOF.parquet"), pd.read_parquet(HX + "test_preds/XGB_SAMPLE_TEST.parquet")
+    O["heuljax_xgb"], P["heuljax_xgb"] = rank(aligned(fo, tr.id, "oof_pred")), rank(aligned(ft, te.id, "test_pred"))
+BW = "ext/s6e9-xgboost-window-encodings-0-946-cv/"
+if os.path.exists(BW + "oof.csv"):
+    fo, ft = pd.read_csv(BW + "oof.csv"), pd.read_csv(BW + "submission.csv")
+    O["blamerx_win"], P["blamerx_win"] = rank(aligned(fo, tr.id, "pred")), rank(aligned(ft, te.id, "Will_Buy_EV"))
 # Aynı özellik matrisiyle RealMLP (pvep-pbe-realmlp)
 if os.path.exists("ext/pbe-realmlp/GENERATOR_AWARE_REALMLP_OOF.parquet"):
     fo = pd.read_parquet("ext/pbe-realmlp/GENERATOR_AWARE_REALMLP_OOF.parquet")
@@ -206,6 +220,18 @@ if os.environ.get("DEADZONE") == "1":  # ölü bölge: sıralamayı koruyarak en
     print(f"ölü bölge: train {zt.sum()} satır ({int(y[zt].sum())} alım), OOF {roc_auc_score(y, oo):.6f} -> "
           f"{roc_auc_score(y, oz):.6f}; test {zv.sum()} satır en alta")
     pt = np.where(zv, pt * 1e-3 - 1, pt)
+if os.environ.get("RULES") == "1":  # dört sınır kuralı (goodpjw2008; trende %100 / %0 alım): sıralamayı koruyarak uçlara
+    def rules(df):
+        inc, km = df.Annual_Income_USD.to_numpy(), df.Daily_Commute_km.to_numpy()
+        nosub, env1 = (df.Subsidy_Available == "No").to_numpy(), (df.Environmental_Concern_Level == 1).to_numpy()
+        anx = df.Range_Anxiety_Level.isin(["Medium", "High"]).to_numpy()
+        bot = ((inc >= 31004) & (inc <= 41970)) | (km >= 83) | ((inc == 30000) & nosub & (env1 | anx))
+        return inc >= 170537, bot
+    shift = lambda p, t, b: rank(p) + 2.0 * t - 2.0 * b
+    (tt, tb), (vt, vb) = rules(pd.read_csv("train.csv")), rules(pd.read_csv("test.csv"))
+    print(f"kurallar: train üst {tt.sum()} ({int(y[tt].sum())} alım), alt {tb.sum()} ({int(y[tb].sum())} alım); OOF "
+          f"{roc_auc_score(y, oo):.6f} -> {roc_auc_score(y, shift(oo, tt, tb)):.6f}; test üst {vt.sum()}, alt {vb.sum()}")
+    pt = shift(pt, vt, vb)
 te["Will_Buy_EV"] = rank(pt)
 te.to_csv(f"{out}.csv", index=False)
 print(f"{out}.csv yazıldı, {len(te)} satır")
