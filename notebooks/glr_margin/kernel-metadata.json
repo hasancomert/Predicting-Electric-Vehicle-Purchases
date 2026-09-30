@@ -1,0 +1,20 @@
+{
+  "id": "hasancmert/pvep-glr-margin",
+  "title": "pvep-glr-margin",
+  "code_file": "glrm.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "competition_sources": [
+    "playground-series-s6e9"
+  ],
+  "dataset_sources": [
+    "itzzomkar/ev-adoption-behavior-and-range-anxiety"
+  ],
+  "kernel_sources": [],
+  "model_sources": []
+}

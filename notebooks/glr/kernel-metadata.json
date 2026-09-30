@@ -1,0 +1,19 @@
+{
+  "language": "python",
+  "kernel_type": "notebook",
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "itzzomkar/ev-adoption-behavior-and-range-anxiety"
+  ],
+  "competition_sources": [
+    "playground-series-s6e9"
+  ],
+  "id": "hasancmert/pvep-pbe-glr",
+  "title": "pvep-pbe-glr",
+  "code_file": "glr.ipynb",
+  "is_private": true,
+  "enable_tpu": false,
+  "kernel_sources": [],
+  "model_sources": []
+}
