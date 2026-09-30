@@ -289,7 +289,7 @@ def xgbm(Xtr, ytr, Xva, yva, Xte, w=None, nit=None, mg=None, **p):
     return mdl.predict_proba(Xva)[:, 1], mdl.predict_proba(Xte)[:, 1], mdl.best_iteration + 1
 
 
-def cat(Xtr, ytr, Xva, yva, Xte, w=None, nit=None, **p):
+def cat(Xtr, ytr, Xva, yva, Xte, w=None, nit=None, mg=None, **p):
     s = lambda d: d.astype({c: str for c in CATS})
     q = dict(iterations=20000, learning_rate=LR, depth=6, eval_metric="AUC",
              od_type="Iter", od_wait=int(20 / LR), cat_features=CATS,
@@ -302,6 +302,12 @@ def cat(Xtr, ytr, Xva, yva, Xte, w=None, nit=None, **p):
         mdl.fit(s(Xtr), ytr, sample_weight=w)
         return None, many(nit, lambda k: mdl.predict_proba(s(Xte), ntree_end=k)[:, 1]), nit
     mdl = CatBoostClassifier(**q)
+    if mg is not None:  # artık model: GLR logit'i baseline; tahmin = sigmoid(ham skor + logit)
+        from catboost import Pool
+        mdl.fit(Pool(s(Xtr), ytr, cat_features=CATS, weight=w, baseline=mg[0]),
+                eval_set=Pool(s(Xva), yva, cat_features=CATS, baseline=mg[1]))
+        sg = lambda X, m: 1 / (1 + np.exp(-(mdl.predict(s(X), prediction_type="RawFormulaVal") + m)))
+        return sg(Xva, mg[1]), sg(Xte, mg[2]), mdl.get_best_iteration() + 1
     mdl.fit(s(Xtr), ytr, sample_weight=w, eval_set=(s(Xva), yva))
     return (mdl.predict_proba(s(Xva))[:, 1], mdl.predict_proba(s(Xte))[:, 1],
             mdl.get_best_iteration() + 1)
