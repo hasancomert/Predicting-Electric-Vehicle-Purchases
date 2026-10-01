@@ -240,17 +240,30 @@ zinciri önsel güçleri 5 / 20 / 80.
 
 **19. gönderimin ağırlıkları:**
 
-README'de kayıtlı, iki haneye yuvarlanmış değerler:
+`blend_ext.py` aynı komutla yeniden çalıştırıldı; çıktı `pevpsubmission19.csv` ile birebir aynı (en büyük fark 0).
+Harman CV 0.94673, iç içe CV 0.94672. 28 adaydan 12'si ağırlık aldı:
 
-| Model | Ağırlık |
-|---|---|
-| Artık XGBoost `t1`, 20 kat (GLR 20 kat logit'inden) | 0.28 |
-| RealMLP + tok | 0.13 |
-| heuljax XGB Sample (açık OOF) | 0.09 |
-| GLR özellik matrisiyle XGBoost | 0.09 |
-| residual-stack v19 (açık OOF) | 0.09 |
-| Artık CatBoost d5 | 0.07 |
-| Diğer adaylar | küçük |
+| Model | Tek başına OOF AUC | Ağırlık |
+|---|---|---|
+| Artık XGBoost `t1`, 20 kat (GLR 20 kat logit'inden) | 0.94661 | 0.281 |
+| RealMLP + tok, 10 kat | 0.94647 | 0.125 |
+| XGBoost, GLR özellik matrisiyle | 0.94636 | 0.094 |
+| residual-stack v19 (açık OOF) | 0.94596 | 0.094 |
+| heuljax XGB Sample (açık OOF) | 0.94631 | 0.094 |
+| Artık CatBoost d5, 10 kat | 0.94655 | 0.074 |
+| XGBoost `t1` tok+chain, 10 kat | 0.94656 | 0.059 |
+| Artık XGBoost `t1`, 10 kat | 0.94659 | 0.053 |
+| XGBoost `t1` tok+chain, 20 kat | 0.94656 | 0.052 |
+| LightGBM `pubp` tok+chain, 10 kat | 0.94653 | 0.035 |
+| CatBoost d5 tok+chain, 10 kat | 0.94648 | 0.020 |
+| RealMLP + tok, 20 kat | 0.94646 | 0.020 |
+
+Ağırlık almayan 16 aday arasında GLR'nin kendisi (0.94643, 20 kat 0.94645), GLR + MLP (0.94646 / 0.94647),
+goodpjw2008'in artık LightGBM / XGBoost'u (0.94646) ve artık LightGBM'imiz (0.94657) var. Ağırlık alanların ikisi
+tek başına en zayıflar arasında (residual-stack v19 0.94596, heuljax XGB 0.94631).
+
+Kurallar bu harmanda: train'de en üste 393 satır (393 alım), en alta 8.595 satır (0 alım; alt kurallar kesişiyor);
+OOF 0.946725 → 0.946727. Testte en üste 156, en alta 3.575 satır gitti.
 
 **Gönderim seçimi:** 19 ve 11 önerildi.
 
