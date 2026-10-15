@@ -1,0 +1,15 @@
+{
+  "id": "hasancmert/pvep-gpt2tok",
+  "title": "pvep-gpt2tok",
+  "code_file": "gpt2tok.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "competition_sources": ["playground-series-s6e9"],
+  "dataset_sources": ["itzzomkar/ev-adoption-behavior-and-range-anxiety"],
+  "kernel_sources": [],
+  "model_sources": []
+}
